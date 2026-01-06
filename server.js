@@ -171,8 +171,8 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     // Compare password
-    
-    if (password != user.password) {
+    const isMatch = await comparePassword(password, user.password);
+    if (!isMatch) {
       return res.status(401).json({
         status: false,
         message: "Email hoặc mật khẩu không đúng",
