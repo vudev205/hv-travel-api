@@ -1,23 +1,31 @@
 import express from "express";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
-dotenv.config();
+import User from "./models/User.js";
+import { 
+  hashPassword, 
+  comparePassword, 
+  generateToken,
+  validateRegister,
+  validateLogin 
+} from "./utils/auth.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// CORS cho phép gọi từ frontend
+// QUAN TRỌNG: Parse JSON body
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   next();
 });
 
-// Connection state
 let isConnected = false;
 
-// Connect to MongoDB
 async function connectDB() {
   if (isConnected && mongoose.connection.readyState === 1) {
     return;
@@ -41,7 +49,7 @@ async function connectDB() {
   }
 }
 
-// Schemas
+// Schemas cho tours, cities, categories (giữ nguyên)
 const tourSchema = new mongoose.Schema({}, { collection: 'tours', strict: false });
 const citySchema = new mongoose.Schema({}, { collection: 'cities', strict: false });
 const categorySchema = new mongoose.Schema({}, { collection: 'categories', strict: false });
@@ -59,10 +67,207 @@ app.get("/", (req, res) => {
       test: "/api/test",
       tours: "/api/tours",
       cities: "/api/cities",
-      categories: "/api/categories"
+      categories: "/api/categories",
+      register: "POST /api/auth/register",
+      login: "POST /api/auth/login"
     }
   });
 });
+
+// ==================== AUTH ENDPOINTS ====================
+
+// Register endpoint
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    await connectDB();
+
+    const { fullName, email, password, rePassword } = req.body;
+
+    // Validate input
+    const validation = validateRegister({ fullName, email, password, rePassword });
+    if (!validation.isValid) {
+      return res.status(400).json({
+        status: false,
+        message: "Dữ liệu không hợp lệ",
+        errors: validation.errors
+      });
+    }
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({
+        status: false,
+        message: "Email đã được sử dụng",
+        errors: { email: "Email này đã được đăng ký" }
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await hashPassword(password);
+
+    // Create user
+    const user = await User.create({
+      fullName: fullName.trim(),
+      email: email.toLowerCase(),
+      password: hashedPassword
+    });
+
+    // Generate token
+    const token = generateToken(user._id);
+
+    // Return user data (without password)
+    res.status(201).json({
+      status: true,
+      message: "Đăng ký thành công",
+      data: {
+        user: {
+          id: user._id.toString(),
+          fullName: user.fullName,
+          email: user.email,
+          avatar: user.avatar,
+          role: user.role,
+          createdAt: user.createdAt
+        },
+        token
+      }
+    });
+
+  } catch (err) {
+    console.error("Register error:", err);
+    res.status(500).json({
+      status: false,
+      message: "Lỗi server",
+      error: err.message
+    });
+  }
+});
+
+// Login endpoint
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    await connectDB();
+
+    const { email, password } = req.body;
+
+    // Validate input
+    const validation = validateLogin({ email, password });
+    if (!validation.isValid) {
+      return res.status(400).json({
+        status: false,
+        message: "Dữ liệu không hợp lệ",
+        errors: validation.errors
+      });
+    }
+
+    // Find user (include password field)
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    
+    if (!user) {
+      return res.status(401).json({
+        status: false,
+        message: "Email hoặc mật khẩu không đúng",
+        errors: { auth: "Thông tin đăng nhập không chính xác" }
+      });
+    }
+
+    // Compare password
+    const isPasswordValid = await comparePassword(password, user.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        status: false,
+        message: "Email hoặc mật khẩu không đúng",
+        errors: { auth: "Thông tin đăng nhập không chính xác" }
+      });
+    }
+
+    // Generate token
+    const token = generateToken(user._id);
+
+    // Return user data (without password)
+    res.status(200).json({
+      status: true,
+      message: "Đăng nhập thành công",
+      data: {
+        user: {
+          id: user._id.toString(),
+          fullName: user.fullName,
+          email: user.email,
+          avatar: user.avatar,
+          role: user.role,
+          createdAt: user.createdAt
+        },
+        token
+      }
+    });
+
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({
+      status: false,
+      message: "Lỗi server",
+      error: err.message
+    });
+  }
+});
+
+// Get current user (protected route example)
+app.get("/api/auth/me", async (req, res) => {
+  try {
+    await connectDB();
+
+    // Get token from header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        status: false,
+        message: "Vui lòng đăng nhập"
+      });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = verifyToken(token);
+
+    if (!decoded) {
+      return res.status(401).json({
+        status: false,
+        message: "Token không hợp lệ hoặc đã hết hạn"
+      });
+    }
+
+    // Get user
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "Không tìm thấy người dùng"
+      });
+    }
+
+    res.status(200).json({
+      status: true,
+      data: {
+        id: user._id.toString(),
+        fullName: user.fullName,
+        email: user.email,
+        avatar: user.avatar,
+        role: user.role,
+        createdAt: user.createdAt
+      }
+    });
+
+  } catch (err) {
+    console.error("Get me error:", err);
+    res.status(500).json({
+      status: false,
+      message: "Lỗi server",
+      error: err.message
+    });
+  }
+});
+
+// ==================== OTHER ENDPOINTS (giữ nguyên) ====================
 
 // Test endpoint
 app.get("/api/test", async (req, res) => {
@@ -141,12 +346,18 @@ app.get("/api/categories", async (req, res) => {
   }
 });
 
-// Vercel cần export app
+// Export cho Vercel
 export default app;
 
 // Local development
 if (process.env.NODE_ENV !== 'production') {
   app.listen(port, () => {
-    console.log(`🚀 Server running at http://localhost:${port}`);
+    console.log(`\n🚀 Server running at http://localhost:${port}`);
+    console.log(`📊 Test: http://localhost:${port}/api/test`);
+    console.log(`🎫 Tours: http://localhost:${port}/api/tours`);
+    console.log(`🏙️  Cities: http://localhost:${port}/api/cities`);
+    console.log(`📂 Categories: http://localhost:${port}/api/categories`);
+    console.log(`🔐 Register: POST http://localhost:${port}/api/auth/register`);
+    console.log(`🔑 Login: POST http://localhost:${port}/api/auth/login\n`);
   });
 }
