@@ -5,6 +5,7 @@ import {
   hashPassword, 
   generateToken,
   validateRegister,
+  comparePassword,
   validateLogin 
 } from "./utils/auth.js";
 
