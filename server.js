@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 import User from "./models/User.js";
 import { 
   hashPassword, 
-  comparePassword, 
   generateToken,
   validateRegister,
   validateLogin 
@@ -172,9 +171,8 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     // Compare password
-    const isPasswordValid = await comparePassword(password, user.password);
     
-    if (!isPasswordValid) {
+    if (password != user.password) {
       return res.status(401).json({
         status: false,
         message: "Email hoặc mật khẩu không đúng",
