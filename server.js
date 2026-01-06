@@ -266,6 +266,224 @@ app.get("/api/auth/me", async (req, res) => {
   }
 });
 
+app.post("/api/auth/resend-otp", async (req, res) => {
+  try {
+    await connectDB();
+
+    const { email, type } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        status: false,
+        message: "Vui lòng nhập email"
+      });
+    }
+
+    // Check user exists
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "Email không tồn tại"
+      });
+    }
+
+    // Gửi OTP mới
+    await createAndSendOTP(email, type || 'register');
+
+    res.status(200).json({
+      status: true,
+      message: "Đã gửi lại mã OTP. Vui lòng kiểm tra email."
+    });
+
+  } catch (err) {
+    console.error("Resend OTP error:", err);
+    res.status(500).json({
+      status: false,
+      message: "Lỗi server",
+      error: err.message
+    });
+  }
+});
+
+// 5. Forgot Password (gửi OTP)
+app.post("/api/auth/forgot-password", async (req, res) => {
+  try {
+    await connectDB();
+
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        status: false,
+        message: "Vui lòng nhập email"
+      });
+    }
+
+    // Check user exists
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "Email không tồn tại"
+      });
+    }
+
+    // Gửi OTP
+    await createAndSendOTP(email, 'forgot_password');
+
+    res.status(200).json({
+      status: true,
+      message: "Mã OTP đã được gửi đến email của bạn."
+    });
+
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({
+      status: false,
+      message: "Lỗi server",
+      error: err.message
+    });
+  }
+});
+
+// 6. Reset Password (với OTP)
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    await connectDB();
+
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        status: false,
+        message: "Vui lòng nhập đầy đủ thông tin"
+      });
+    }
+
+    // Validate new password
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        status: false,
+        message: "Mật khẩu phải có ít nhất 6 ký tự"
+      });
+    }
+
+    // Verify OTP
+    const result = await verifyOTP(email, otp, 'forgot_password');
+
+    if (!result.success) {
+      return res.status(400).json({
+        status: false,
+        message: result.message
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password
+    const user = await User.findOneAndUpdate(
+      { email: email.toLowerCase() },
+      { password: hashedPassword },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "Không tìm thấy người dùng"
+      });
+    }
+
+    res.status(200).json({
+      status: true,
+      message: "Đặt lại mật khẩu thành công!"
+    });
+
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({
+      status: false,
+      message: "Lỗi server",
+      error: err.message
+    });
+  }
+});
+
+// 7. Change Password (yêu cầu current password)
+app.post("/api/auth/change-password", async (req, res) => {
+  try {
+    await connectDB();
+
+    const { email, currentPassword, newPassword } = req.body;
+
+    // Hoặc dùng token từ header
+    // const token = req.headers.authorization?.split(' ')[1];
+    // const decoded = verifyToken(token);
+
+    if (!email || !currentPassword || !newPassword) {
+      return res.status(400).json({
+        status: false,
+        message: "Vui lòng nhập đầy đủ thông tin"
+      });
+    }
+
+    // Validate new password
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        status: false,
+        message: "Mật khẩu mới phải có ít nhất 6 ký tự"
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        status: false,
+        message: "Mật khẩu mới không được trùng với mật khẩu cũ"
+      });
+    }
+
+    // Find user with password
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: "Không tìm thấy người dùng"
+      });
+    }
+
+    // Verify current password
+    const isPasswordValid = await comparePassword(currentPassword, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        status: false,
+        message: "Mật khẩu hiện tại không đúng"
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({
+      status: true,
+      message: "Đổi mật khẩu thành công!"
+    });
+
+  } catch (err) {
+    console.error("Change password error:", err);
+    res.status(500).json({
+      status: false,
+      message: "Lỗi server",
+      error: err.message
+    });
+  }
+});
+
 // ==================== OTHER ENDPOINTS (giữ nguyên) ====================
 
 // Test endpoint

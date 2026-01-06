@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: [true, 'Vui lòng nhập email'],
-    unique: true,
+    unique: true, 
     lowercase: true,
     trim: true,
     validate: [validator.isEmail, 'Email không hợp lệ']
@@ -21,7 +21,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Vui lòng nhập mật khẩu'],
     minlength: [6, 'Mật khẩu phải có ít nhất 6 ký tự'],
-    select: false // Không trả về password khi query
+    select: false
   },
   avatar: {
     type: String,
@@ -35,21 +35,10 @@ const userSchema = new mongoose.Schema({
   isVerified: {
     type: Boolean,
     default: false
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
 }, {
   timestamps: true
 });
-
-// Index cho tìm kiếm nhanh
-userSchema.index({ email: 1 });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
