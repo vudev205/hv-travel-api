@@ -64,9 +64,9 @@ app.get("/", (req, res) => {
     message: "HV-Travel API is running",
     endpoints: {
       test: "/api/test",
-      tours: "/api/tours",
-      cities: "/api/cities",
-      categories: "/api/categories",
+      tours: "/api/tours/list",
+      cities: "/api/cities/list",
+      categories: "/api/categories/list",
       register: "POST /api/auth/register",
       login: "POST /api/auth/login"
     }
@@ -130,7 +130,26 @@ app.post("/api/auth/forgot-password", async (req,res)=>{
     if(!email) return res.status(400).json({ status:false, message:"Vui lòng nhập email" });
 
     const user = await User.findOne({ email: email.toLowerCase() });
-    if(!user) return res.status(404).json({ status:false, message:"Email không tồn tại" });
+    if(!user) return res.status(404).json({ status:false, message:"Email chưa được đăng ký trên hệ thống!" });
+
+    const otpId = await createAndSendOTP(email,'forgot_password');
+
+    res.status(200).json({ status:true, otpId: otpId, message:"Mã OTP đã được gửi đến email của bạn." });
+  } catch(err){
+    console.error("Forgot password error:", err);
+    res.status(500).json({ status:false, message:"Lỗi server", error:err.message });
+  }
+});
+
+// Forgot Password (OTP)
+app.post("/api/auth/resend-otp", async (req,res)=>{
+  try {
+    await connectDB();
+    const { email } = req.body;
+    if(!email) return res.status(400).json({ status:false, message:"Vui lòng nhập email" });
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if(!user) return res.status(404).json({ status:false, message:"Email chưa được đăng ký trên hệ thống!" });
 
     const otpId = await createAndSendOTP(email,'forgot_password');
 
@@ -225,9 +244,46 @@ app.get("/api/test", async (req,res)=>{
   }catch(err){ res.status(500).json({ status:false, error:err.message }); }
 });
 
-app.get("/api/tours", async(req,res)=>{ await connectDB(); const tours = await Tour.find({}).lean().maxTimeMS(5000); tours.forEach(t=>t._id && (t._id=t._id.toString())); res.json({ status:true, count:tours.length, data:tours }); });
-app.get("/api/cities", async(req,res)=>{ await connectDB(); const cities = await City.find({}).lean().maxTimeMS(5000); cities.forEach(c=>c._id && (c._id=c._id.toString())); res.json({ status:true, count:cities.length, data:cities }); });
-app.get("/api/categories", async(req,res)=>{ await connectDB(); const categories = await Category.find({}).lean().maxTimeMS(5000); categories.forEach(c=>c._id && (c._id=c._id.toString())); res.json({ status:true, count:categories.length, data:categories }); });
+app.get("/api/tours/list", async (req, res) => {
+  try {
+    await connectDB();
+    const limit = parseInt(req.query.limit) || 20;
+    const start = parseInt(req.query.start) || 0;
+    // const end = parseInt(req.query.end as string); // nếu cần lọc theo index hoặc date
+
+    const tours = await Tour.find({})
+      .skip(start)
+      .limit(limit)
+      .select("_id name category thumpnail_url")
+      .lean()
+      .maxTimeMS(5000);
+
+    tours.forEach(t => t._id && (t._id = t._id.toString()));
+
+    res.json({ status: true, count: tours.length, data: tours });
+  } catch (err) {
+    console.error("Get All tours error:", err);
+    res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+  }
+});
+app.get("/api/tours/:id", async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ status: false, message: "Tour id không được để trống!" });
+
+    const tour = await Tour.findById(id).lean().maxTimeMS(5000);
+    if (!tour) return res.status(404).json({ status: false, message: "Tour không hợp lệ!" });
+
+    if (tour._id) tour._id = tour._id.toString();
+    res.json({ status: true, data: tour });
+  } catch (err) {
+    console.error("Tour detail error:", err);
+    res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+  }
+});
+app.get("/api/cities/list", async(req,res)=>{ await connectDB(); const cities = await City.find({}).lean().maxTimeMS(5000); cities.forEach(c=>c._id && (c._id=c._id.toString())); res.json({ status:true, count:cities.length, data:cities }); });
+app.get("/api/categories/list", async(req,res)=>{ await connectDB(); const categories = await Category.find({}).lean().maxTimeMS(5000); categories.forEach(c=>c._id && (c._id=c._id.toString())); res.json({ status:true, count:categories.length, data:categories }); });
 
 // Export cho Vercel
 export default app;
