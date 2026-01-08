@@ -254,7 +254,7 @@ app.get("/api/tours/list", async (req, res) => {
     const tours = await Tour.find({})
       .skip(start)
       .limit(limit)
-      .select("_id name category thumpnail_url")
+      .select("_id name category thumpnail_url time vehicle price newPrice")
       .lean()
       .maxTimeMS(5000);
 
