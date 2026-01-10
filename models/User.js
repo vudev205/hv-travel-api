@@ -4,42 +4,75 @@ import validator from "validator";
 const userSchema = new mongoose.Schema({
   fullName: {
     type: String,
-    required: [true, 'Vui lòng nhập họ tên'],
+    required: true,
     trim: true,
-    minlength: [2, 'Họ tên phải có ít nhất 2 ký tự'],
-    maxlength: [100, 'Họ tên không được vượt quá 100 ký tự']
+    minlength: 2,
+    maxlength: 100
   },
   email: {
     type: String,
-    required: [true, 'Vui lòng nhập email'],
-    unique: true, 
+    required: true,
+    unique: true,
     lowercase: true,
     trim: true,
     validate: [validator.isEmail, 'Email không hợp lệ']
   },
   password: {
     type: String,
-    required: [true, 'Vui lòng nhập mật khẩu'],
-    minlength: [6, 'Mật khẩu phải có ít nhất 6 ký tự'],
+    required: true,
+    minlength: 6,
     select: false
   },
+
+  phone: {
+    type: String,
+    default: ""
+  },
+
+  gender: {
+    type: String,
+    enum: ["male", "female", "other", ""],
+    default: ""
+  },
+
+  birthday: {
+    type: Date,
+    default: null
+  },
+
+  address: {
+    type: String,
+    default: ""
+  },
+
   avatar: {
     type: String,
     default: null
   },
+
   role: {
     type: String,
     enum: ['user', 'admin'],
     default: 'user'
   },
-  isVerified: {
+
+  // xác thực riêng
+  emailVerified: {
     type: Boolean,
     default: false
+  },
+  phoneVerified: {
+    type: Boolean,
+    default: false
+  },
+  tokenVersion: {
+    type: Number,
+    default: 0,
   }
+
 }, {
   timestamps: true
 });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
-
 export default User;
