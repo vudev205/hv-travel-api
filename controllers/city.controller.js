@@ -1,5 +1,6 @@
 import City from "../models/City.js";
 import connectDB from "../config/db.js";
+import mongoose from "mongoose"
 
 export const getCities = async (req, res) => {
   try {
@@ -42,11 +43,22 @@ export const createCity = async (req, res) => {
 };
 
 export const getCityDetail = async (req, res) => {
-  await connectDB();
+  try {
+    await connectDB();
 
-  const city = await City.findById(req.params.id).lean();
-  if (!city)
-    return res.status(404).json({ status: false, message: "City không tồn tại" });
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ status: false, message: "Id không hợp lệ" });
+    }
 
-  res.json({ status: true, data: tour });
+    const city = await City.findById(id).lean();
+    if (!city) {
+      return res.status(404).json({ status: false, message: "City không tồn tại" });
+    }
+
+    return res.json({ status: true, data: city });
+  } catch (err) {
+    console.error("getCityDetail error:", err);
+    return res.status(500).json({ status: false, message: "Lỗi server" });
+  }
 };
