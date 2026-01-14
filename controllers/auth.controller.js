@@ -73,7 +73,12 @@ export const login = async (req, res) => {
 };
 
 export const me = async (req, res) => {
-  res.json({ status: true, data: req.user });
+  try {
+    await connectDB();
+    res.json({ status: true, data: req.user });
+  } catch (err) {
+    res.status(500).json({ status: false, error: err.message });
+  }
 };
 
 export const logout = async (req, res) => {
