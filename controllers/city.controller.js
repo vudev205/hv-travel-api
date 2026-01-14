@@ -40,3 +40,13 @@ export const createCity = async (req, res) => {
     });
   }
 };
+
+export const getCityDetail = async (req, res) => {
+  await connectDB();
+
+  const city = await City.findById(req.params.id).lean();
+  if (!city)
+    return res.status(404).json({ status: false, message: "City không tồn tại" });
+
+  res.json({ status: true, data: tour });
+};
