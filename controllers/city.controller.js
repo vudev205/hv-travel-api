@@ -1,5 +1,6 @@
 import City from "../models/City.js";
 import connectDB from "../config/db.js";
+import mongoose from "mongoose"
 
 export const getCities = async (req, res) => {
   try {
