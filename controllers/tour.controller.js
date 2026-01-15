@@ -9,7 +9,7 @@ const Tour = mongoose.models.Tour || mongoose.model(
 export const listTours = async (req, res) => {
   await connectDB();
 
-  const limit = +req.query.limit || 20;
+  const limit = +req.query.limit || 999;
   const start = +req.query.start || 0;
 
   const tours = await Tour.find({})
