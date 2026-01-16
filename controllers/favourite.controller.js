@@ -1,0 +1,50 @@
+import mongoose from "mongoose";
+import connectDB from "../config/db.js";
+import Favourite from "../models/Favourite.js"; // <- đổi path đúng theo project bạn
+
+export const listFavourites = async (req, res) => {
+  try {
+    await connectDB();
+
+    const userId = req.user?._id || req.userId;
+    if (!userId) {
+      return res.status(401).json({
+        status: false,
+        message: "Bạn chưa đăng nhập",
+      });
+    }
+
+    // query optional: ?category=beach (nếu bạn lưu category dạng string) 
+    // hoặc ?category=<ObjectId> nếu category là ObjectId
+    const { category } = req.query;
+
+    const filter = { user: userId };
+
+    // Nếu Favourite có field category thì mới filter theo category
+    // (Hiện schema bạn yêu cầu chưa có category, đoạn này chỉ là optional)
+    if (category) {
+      if (mongoose.isValidObjectId(category)) filter.category = category;
+      else filter.category = category; // string
+    }
+
+    const favourites = await Favourite.find(filter)
+      .select(
+        "_id user tour city name time vehicle price newPrice thumbnail_url createdAt"
+      )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      status: true,
+      message: "OK",
+      data: favourites,
+      total: favourites.length,
+    });
+  } catch (err) {
+    console.error("listFavourites error:", err);
+    return res.status(500).json({
+      status: false,
+      message: "Lỗi server",
+    });
+  }
+};
