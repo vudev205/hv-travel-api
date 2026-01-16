@@ -1,10 +1,10 @@
-import { Schema, Types, model } from "mongoose";
+import mongoose from "mongoose";
 
-const FavouriteSchema = new Schema(
+const FavouriteSchema = new mongoose.Schema(
   {
-    user: { type: Types.ObjectId, ref: "User", required: true, index: true },
-    tour: { type: Types.ObjectId, ref: "Tour", required: true, index: true },
-    city: { type: Types.ObjectId, ref: "City", required: true, index: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    tour: { type: mongoose.Schema.Types.ObjectId, ref: "Tour", required: true, index: true },
+    city: { type: mongoose.Schema.Types.ObjectId, ref: "City", required: true, index: true },
 
     name: { type: String, required: true },
     time: { type: String, required: true },
@@ -28,4 +28,7 @@ const FavouriteSchema = new Schema(
 
 FavouriteSchema.index({ user: 1, tour: 1 }, { unique: true });
 
-export const Favourite = model("Favourite", FavouriteSchema);
+const Favourite =
+  mongoose.models.Favourite || mongoose.model("Favourite", FavouriteSchema);
+
+export default Favourite;
