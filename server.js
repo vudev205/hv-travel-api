@@ -30,7 +30,7 @@ app.get("/", (_, res) => {
       categories: "/api/categories/list",
       register: "POST /api/auth/register",
       login: "POST /api/auth/login",
-      favourites: "/api/favourites",
+      favourites: "/api/favourites/list",
     }
   });
 });
