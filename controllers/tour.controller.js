@@ -9,13 +9,13 @@ const Tour = mongoose.models.Tour || mongoose.model(
 export const listTours = async (req, res) => {
   await connectDB();
 
-  const limit = +req.query.limit || 20;
+  const limit = +req.query.limit || 999;
   const start = +req.query.start || 0;
 
   const tours = await Tour.find({})
     .skip(start)
     .limit(limit)
-    .select("_id name category thumpnail_url time vehicle price newPrice")
+    .select("_id name category thumbnail_url time vehicle price newPrice")
     .lean();
 
   res.json({ status: true, count: tours.length, data: tours });
