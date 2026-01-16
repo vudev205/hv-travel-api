@@ -17,7 +17,7 @@ app.use("/api/tours", tourRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/cities", cityRoutes);
 app.use("/api/auth", authRoutes);
-app.use("/api/favourite", favouriteRoutes);
+app.use("/api/favourites", favouriteRoutes);
 
 app.get("/", (_, res) => {
   res.json({ 
