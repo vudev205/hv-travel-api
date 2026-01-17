@@ -48,3 +48,33 @@ export const listFavourites = async (req, res) => {
     });
   }
 };
+
+export const deleteFavouriteByTourId = async (req, res) => {
+  try {
+    await connectDB();
+
+    const userId = req.user?._id || req.userId;
+    if (!userId) {
+      return res.status(401).json({ status: false, message: "Bạn chưa đăng nhập" });
+    }
+
+    const { tourId } = req.params;
+    if (!mongoose.isValidObjectId(tourId)) {
+      return res.status(400).json({ status: false, message: "tourId không hợp lệ" });
+    }
+
+    const deleted = await Favourite.findOneAndDelete({
+      user: userId,
+      tour: tourId,
+    }).lean();
+
+    // ✅ idempotent: xoá rồi / chưa có cũng coi như OK (UI đỡ phải xử lý 404)
+    return res.status(200).json({
+      status: true,
+      message: deleted ? "Đã xoá khỏi yêu thích" : "Tour này chưa nằm trong yêu thích",
+    });
+  } catch (err) {
+    console.error("deleteFavouriteByTourId error:", err);
+    return res.status(500).json({ status: false, message: "Lỗi server" });
+  }
+};
