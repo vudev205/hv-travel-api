@@ -8,6 +8,7 @@ import {
 } from "../utils/auth.js";
 import { createAndSendOTP, verifyOTP, getVerifiedEmailByOtpId } from "../utils/otpHelper.js";
 import connectDB from "../config/db.js";
+import mongoose from "mongoose"
 
 export const register = async (req, res) => {
   try {
@@ -203,3 +204,32 @@ export const changePassword = async (req,res)=>{
     res.status(500).json({ status:false, message:"Lỗi server", error:err.message });
   }
 };
+
+export const dbCheck = async (req, res) => {
+  try {
+    const state = mongoose.connection.readyState;
+
+    if (state !== 1) {
+      return res.status(503).json({
+        ok: false,
+        message: "Chua ket noi...",
+        readyState: state,
+      });
+    }
+
+    const pingResult = await mongoose.connection.db.admin().ping();
+
+    return res.status(200).json({
+      ok: true,
+      message: "Da ket noi thanh cong...",
+      readyState: state,
+      ping: pingResult,
+    })
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      message: "Loi server",
+      error: err?.message || String(err),
+    })
+  }
+}
