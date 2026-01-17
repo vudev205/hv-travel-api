@@ -13,6 +13,6 @@ router.post("/resend-otp", resendOtp);
 router.post("/verify-otp", verifyOtp);
 router.post("/reset-password", resetPassword);
 router.post("/change-password", changePassword);
-router.post("/db", dbCheck);
+router.get("/db", dbCheck);
 
 export default router;
