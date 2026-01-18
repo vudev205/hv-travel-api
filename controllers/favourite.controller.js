@@ -49,6 +49,44 @@ export const listFavourites = async (req, res) => {
   }
 };
 
+export const addFavouriteByTourId = async (req, res) => {
+  try {
+    await connectDB();
+
+    const userId = req.user?._id || req.userId;
+    if (!userId) {
+      return res.status(401).json({ status: false, message: "Bạn chưa đăng nhập" });
+    }
+
+    const { tourId } = req.params;
+    if (!mongoose.isValidObjectId(tourId)) {
+      return res.status(400).json({ status: false, message: "tourId không hợp lệ" });
+    }
+
+    // ✅ Idempotent upsert: đã có thì không tạo trùng, chưa có thì tạo mới
+    const doc = await Favourite.findOneAndUpdate(
+      { user: userId, tour: tourId },
+      {
+        $setOnInsert: {
+          user: userId,
+          tour: tourId,
+          
+        },
+      },
+      { new: true, upsert: true }
+    ).lean();
+
+    return res.status(200).json({
+      status: true,
+      message: "Đã thêm vào yêu thích",
+      data: doc,
+    });
+  } catch (err) {
+    console.error("addFavouriteByTourId error:", err);
+    return res.status(500).json({ status: false, message: "Lỗi server" });
+  }
+};
+
 export const deleteFavouriteByTourId = async (req, res) => {
   try {
     await connectDB();
