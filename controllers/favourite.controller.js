@@ -63,14 +63,32 @@ export const addFavouriteByTourId = async (req, res) => {
       return res.status(400).json({ status: false, message: "tourId không hợp lệ" });
     }
 
-    // ✅ Idempotent upsert: đã có thì không tạo trùng, chưa có thì tạo mới
+    // 1) Lấy tour để copy field
+    const tour = await Tour.findById(tourId)
+      .select("_id city name time vehicle price newPrice thumbnail_url")
+      .lean();
+
+    if (!tour) {
+      return res.status(404).json({ status: false, message: "Không tìm thấy tour" });
+    }
+
+    // 2) Upsert favourite theo (user, tour) để tránh trùng
     const doc = await Favourite.findOneAndUpdate(
-      { user: userId, tour: tourId },
+      { user: userId, tour: tour._id },
       {
+        $set: {
+          // nếu tour thay đổi giá / thumbnail, bạn muốn favourite luôn update theo tour:
+          city: tour.city,
+          name: tour.name,
+          time: tour.time,
+          vehicle: tour.vehicle,
+          price: tour.price,
+          newPrice: tour.newPrice,
+          thumbnail_url: tour.thumbnail_url,
+        },
         $setOnInsert: {
           user: userId,
-          tour: tourId,
-          
+          tour: tour._id,
         },
       },
       { new: true, upsert: true }
