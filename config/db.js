@@ -20,9 +20,11 @@ export default async function connectDB() {
 
   try {
     cached.conn = await cached.promise;
+    console.log("MongoDB connected!");
     return cached.conn;
   } catch (err) {
     cached.promise = null; // lần sau retry lại được
     throw err; // ✅ quan trọng: fail rõ ràng
+    console.log("MongoDB connect failed!");
   }
 }
