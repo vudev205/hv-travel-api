@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import connectDB from "../config/db.js";
 import Favourite from "../models/Favourite.js"; // <- đổi path đúng theo project bạn
+import Tour from "../models/Tour.js"
 
 export const listFavourites = async (req, res) => {
   try {
