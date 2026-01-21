@@ -5,6 +5,7 @@ const FavouriteSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     tour: { type: mongoose.Schema.Types.ObjectId, ref: "Tour", required: true, index: true },
     city: { type: mongoose.Schema.Types.ObjectId, ref: "City", required: true, index: true },
+    category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: false },
 
     name: { type: String, required: true },
     time: { type: String, required: true },

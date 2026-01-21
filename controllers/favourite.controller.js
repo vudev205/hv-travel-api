@@ -30,7 +30,7 @@ export const listFavourites = async (req, res) => {
 
     const favourites = await Favourite.find(filter)
       .select(
-        "_id user tour city name time vehicle price newPrice thumbnail_url createdAt"
+        "_id user tour city category name time vehicle price newPrice thumbnail_url createdAt"
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -66,7 +66,7 @@ export const addFavouriteByTourId = async (req, res) => {
 
     // 1) Lấy tour để copy field
     const tour = await Tour.findById(tourId)
-      .select("_id city name time vehicle price newPrice thumbnail_url")
+      .select("_id city category name time vehicle price newPrice thumbnail_url")
       .lean();
 
     if (!tour) {
@@ -80,6 +80,7 @@ export const addFavouriteByTourId = async (req, res) => {
         $set: {
           // nếu tour thay đổi giá / thumbnail, bạn muốn favourite luôn update theo tour:
           city: tour.city,
+          category: tour.category,
           name: tour.name,
           time: tour.time,
           vehicle: tour.vehicle,
