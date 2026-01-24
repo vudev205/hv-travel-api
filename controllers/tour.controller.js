@@ -5,8 +5,8 @@ export const listTours = async (req, res) => {
   try {
     await connectDB();
 
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 200);
-    const start = Math.max(Number(req.query.start) || 0, 0);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 999);
+  const start = Math.max(parseInt(req.query.start, 10) || 0, 0);
 
     const query = { deleted: false, status: "active" };
 
