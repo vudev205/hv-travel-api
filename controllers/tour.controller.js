@@ -15,7 +15,7 @@ export const listTours = async (req, res) => {
   const tours = await Tour.find({})
     .skip(start)
     .limit(limit)
-    .select("_id name category thumbnail_url time vehicle price newPrice")
+    .select("_id name category city thumbnail_url time vehicle price newPrice")
     .lean();
 
   res.json({ status: true, count: tours.length, data: tours });
