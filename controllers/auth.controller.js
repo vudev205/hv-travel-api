@@ -206,6 +206,7 @@ export const changePassword = async (req,res)=>{
 };
 
 export const dbCheck = async (req, res) => {
+  await connectDB();
   try {
     const state = mongoose.connection.readyState;
 

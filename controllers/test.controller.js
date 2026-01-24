@@ -2,6 +2,7 @@ import connectDB from "../config/db.js";
 import mongoose from "mongoose";
 
 export const checkConnect = async (req, res) =>{
+    await connectDB();
     const state = mongoose.connection.readyState;
     const mapState = {
         0: "disconnected",
