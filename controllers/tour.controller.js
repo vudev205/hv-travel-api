@@ -1,32 +1,45 @@
-import mongoose from "mongoose";
+import Tour from "../models/Tour.js";
 import connectDB from "../config/db.js";
 
-const Tour = mongoose.models.Tour || mongoose.model(
-  "Tour",
-  new mongoose.Schema({}, { collection: "tours", strict: false })
-);
-
 export const listTours = async (req, res) => {
-  await connectDB();
+  try {
+    await connectDB();
 
-  const limit = +req.query.limit || 999;
-  const start = +req.query.start || 0;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 200);
+    const start = Math.max(Number(req.query.start) || 0, 0);
 
-  const tours = await Tour.find({})
-    .skip(start)
-    .limit(limit)
-    .select("_id name category city thumbnail_url time vehicle price newPrice")
-    .lean();
+    const query = { deleted: false, status: "active" };
 
-  res.json({ status: true, count: tours.length, data: tours });
+    const tours = await Tour.find(query)
+      .skip(start)
+      .limit(limit)
+      .select("_id name category city thumbnail_url time vehicle price newPrice")
+      .lean();
+
+    return res.json({ status: true, count: tours.length, data: tours });
+  } catch (e) {
+    console.error("listTours error:", e);
+    return res.status(500).json({ status: false, message: "Không lấy được danh sách tour" });
+  }
 };
 
 export const tourDetail = async (req, res) => {
-  await connectDB();
+  try {
+    await connectDB();
 
-  const tour = await Tour.findById(req.params.id).lean();
-  if (!tour)
-    return res.status(404).json({ status: false, message: "Tour không tồn tại" });
+    const tour = await Tour.findOne({
+      _id: req.params.id,
+      deleted: false,
+      status: "active",
+    }).lean();
 
-  res.json({ status: true, data: tour });
+    if (!tour) {
+      return res.status(404).json({ status: false, message: "Tour không tồn tại" });
+    }
+
+    return res.json({ status: true, data: tour });
+  } catch (e) {
+    console.error("tourDetail error:", e);
+    return res.status(500).json({ status: false, message: "Không lấy được chi tiết tour" });
+  }
 };
