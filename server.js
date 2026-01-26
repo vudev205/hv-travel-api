@@ -1,6 +1,5 @@
+import dotenv from "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
-dotenv.config();
 
 import categoryRoutes from "./routes/category.routes.js";
 import cityRoutes from "./routes/city.routes.js";
@@ -9,6 +8,7 @@ import authRoutes from "./routes/auth.routes.js";
 import connectDB from "./config/db.js";
 import favouriteRoutes from "./routes/favourite.route.js";
 import testRoutes from "./routes/test.routes.js";
+import chatbotRoutes from "./routes/chatbot.routes.js";
 
 const app = express();
 app.use(express.json());
@@ -20,6 +20,7 @@ app.use("/api/cities", cityRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/favourites", favouriteRoutes);
 app.use("/api/test", testRoutes);
+app.use("/api/chatbot", chatbotRoutes);
 
 app.get("/", (_, res) => {
   res.json({ 
@@ -43,4 +44,3 @@ app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   await connectDB();
 });
-
