@@ -1,11 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Tour from "../models/Tour.js";
 import { getHistory, appendHistory } from "../memory/chatMemory.js";
+import connectDB from "../config/db.js";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export const chatWithTour = async (req, res) => {
   try { 
+    await connectDB();
     const { tourId, message, conversationId } = req.body;
 
     if (!tourId || !message || !conversationId) {

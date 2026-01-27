@@ -1,8 +1,10 @@
 import User from "../models/User.js";
 import { verifyToken } from "../utils/auth.js";
+import connectDB from "../config/db.js"
 
 export async function auth(req, res, next) {
   try {
+    await connectDB();
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
