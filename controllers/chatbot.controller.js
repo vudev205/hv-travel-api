@@ -5,6 +5,36 @@ import connectDB from "../config/db.js";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+export const health = async (req, res) => {
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(500).json({
+      status: "error",
+      message: "Missing GEMINI_API_KEY"
+    });
+  }
+
+  return res.status(200).json({
+    status: "ok",
+    message: "Service is healthy"
+  });
+};
+
+export const checkGeminiKey = async (req, res) => {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    await model.generateContent("OK");
+
+    return res.json({ status: "ok" });
+  } catch (err) {
+    return res.status(400).json({
+      status: "error",
+      message: "Invalid Gemini API key",
+      detail: err?.message
+    });
+  }
+};
+
+
 export const chatWithTour = async (req, res) => {
   try { 
     await connectDB();
