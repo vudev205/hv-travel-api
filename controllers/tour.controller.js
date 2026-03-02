@@ -9,7 +9,7 @@ export const listTours = async (req, res) => {
     const start = Math.max(parseInt(req.query.start, 10) || 0, 0);
     const { category, city } = req.query;
 
-    const query = { deleted: false, status: "active" };
+    const query = { deleted: false, status: "Active" };
 
     // Filter by category name (string)
     if (category) query.category = category;
@@ -37,7 +37,7 @@ export const tourDetail = async (req, res) => {
     const tour = await Tour.findOne({
       _id: req.params.id,
       deleted: false,
-      status: "active",
+      status: "Active",
     }).lean();
 
     if (!tour) {
