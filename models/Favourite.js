@@ -1,35 +1,29 @@
 import mongoose from "mongoose";
 
-const FavouriteSchema = new mongoose.Schema(
+const { Schema } = mongoose;
+
+const favouriteSchema = new Schema(
   {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    tour: { type: mongoose.Schema.Types.ObjectId, ref: "Tour", required: true, index: true },
-    city: { type: mongoose.Schema.Types.ObjectId, ref: "City", required: true, index: true },
-    category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: false },
-
-    name: { type: String, required: true },
-    time: { type: String, required: true },
-    vehicle: { type: String, required: true },
-
-    price: {
-      adult: { type: Number, required: true },
-      children: { type: Number, required: true },
-      baby: { type: Number, required: true },
+    customerId: {
+      type: Schema.Types.ObjectId,
+      ref: "Customer",
+      required: true,
+      index: true,
     },
-    newPrice: {
-      adult: { type: Number, required: true },
-      children: { type: Number, required: true },
-      baby: { type: Number, required: true },
+    tourId: {
+      type: Schema.Types.ObjectId,
+      ref: "Tour",
+      required: true,
+      index: true,
     },
-
-    thumbnail_url: { type: String, required: true },
   },
   { timestamps: true }
 );
 
-FavouriteSchema.index({ user: 1, tour: 1 }, { unique: true });
+// One favourite per customer per tour
+favouriteSchema.index({ customerId: 1, tourId: 1 }, { unique: true });
 
 const Favourite =
-  mongoose.models.Favourite || mongoose.model("Favourite", FavouriteSchema);
+  mongoose.models.Favourite || mongoose.model("Favourite", favouriteSchema);
 
 export default Favourite;

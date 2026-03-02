@@ -1,13 +1,13 @@
 import express from "express";
 import { register, login, me, forgotPassword, resendOtp, verifyOtp, resetPassword, changePassword, logout, dbCheck } from "../controllers/auth.controller.js";
-import { auth } from "../middlewares/authMiddleware.js";
+import { customerAuth } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
 router.post("/register", register);
 router.post("/login", login);
-router.post("/logout", auth, logout)
-router.get("/me", auth, me);
+router.post("/logout", customerAuth, logout);
+router.get("/me", customerAuth, me);
 router.post("/forgot-password", forgotPassword);
 router.post("/resend-otp", resendOtp);
 router.post("/verify-otp", verifyOtp);

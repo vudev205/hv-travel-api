@@ -6,14 +6,21 @@ export const listTours = async (req, res) => {
     await connectDB();
 
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 999);
-  const start = Math.max(parseInt(req.query.start, 10) || 0, 0);
+    const start = Math.max(parseInt(req.query.start, 10) || 0, 0);
+    const { category, city } = req.query;
 
     const query = { deleted: false, status: "active" };
+
+    // Filter by category name (string)
+    if (category) query.category = category;
+
+    // Filter by destination city (string)
+    if (city) query["destination.city"] = city;
 
     const tours = await Tour.find(query)
       .skip(start)
       .limit(limit)
-      .select("_id name category city thumbnail_url time vehicle price newPrice")
+      .select("_id name category destination images duration price rating reviewCount maxParticipants currentParticipants startDate")
       .lean();
 
     return res.json({ status: true, count: tours.length, data: tours });

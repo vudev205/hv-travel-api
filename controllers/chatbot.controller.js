@@ -36,7 +36,7 @@ export const checkGeminiKey = async (req, res) => {
 
 
 export const chatWithTour = async (req, res) => {
-  try { 
+  try {
     await connectDB();
     const { tourId, message, conversationId } = req.body;
 
@@ -78,6 +78,25 @@ function buildPrompt(tour, history, userMessage) {
         : `Tư vấn viên: ${h.content}`
     )
     .join("\n");
+
+  // Build price info with discount
+  const adultPrice = tour.price?.adult || 0;
+  const childPrice = tour.price?.child || 0;
+  const infantPrice = tour.price?.infant || 0;
+  const discount = tour.price?.discount || 0;
+
+  // Build schedule text
+  const scheduleText = (tour.schedule || [])
+    .map(s => {
+      const activities = (s.activities || []).join(", ");
+      return `Ngày ${s.day}: ${s.title} - ${s.description}${activities ? ` (${activities})` : ""}`;
+    })
+    .join("\n");
+
+  // Build inclusions/exclusions
+  const inclusionsText = (tour.inclusions || []).join(", ") || "Chưa có thông tin";
+  const exclusionsText = (tour.exclusions || []).join(", ") || "Chưa có thông tin";
+
   return `
   Bạn là một nhân viên tư vấn du lịch chuyên nghiệp của HV Travel.
   QUY TẮC:
@@ -92,31 +111,35 @@ function buildPrompt(tour, history, userMessage) {
   - Chỉ tư vấn dựa trên thông tin tour bên dưới
   - Không tự bịa thông tin nếu không có
   - Trả lời ngắn gọn, dễ hiểu, thân thiện
-  - Nếu khách hỏi giá → dùng newPrice nếu có
+  - Nếu khách hỏi giá → dùng giá và nêu rõ giảm giá nếu có
   - Nếu khách hỏi lịch trình → tóm tắt theo ngày
-  - Nếu khách hỏi số chỗ → trả lời theo stock
+  - Nếu khách hỏi số chỗ → trả lời theo maxParticipants
   - Nếu không có thông tin → nói "Hiện tour chưa có thông tin này"
 
   THÔNG TIN TOUR:
   Tên tour: ${tour.name}
+  Danh mục: ${tour.category || "Chưa phân loại"}
+  Điểm đến: ${tour.destination?.city || ""}, ${tour.destination?.country || "Việt Nam"}
   Mô tả: ${tour.description}
-  Thời gian: ${tour.time}
-  Phương tiện: ${tour.vehicle}
+  Thời lượng: ${tour.duration?.text || `${tour.duration?.days || 0} ngày ${tour.duration?.nights || 0} đêm`}
 
   Giá:
-  - Người lớn: ${tour.newPrice?.adult ?? tour.price.adult}
-  - Trẻ em: ${tour.newPrice?.children ?? tour.price.children}
-  - Em bé: ${tour.newPrice?.baby ?? tour.price.baby}
+  - Người lớn: ${adultPrice.toLocaleString("vi-VN")} VND
+  - Trẻ em: ${childPrice.toLocaleString("vi-VN")} VND
+  - Em bé: ${infantPrice.toLocaleString("vi-VN")} VND
+  ${discount > 0 ? `- Giảm giá: ${discount}%` : ""}
 
-  Số chỗ còn:
-  - Người lớn: ${tour.stock.adult}
-  - Trẻ em: ${tour.stock.children}
-  - Em bé: ${tour.stock.baby}
+  Số chỗ: ${tour.maxParticipants || "Không giới hạn"} (đã đặt: ${tour.currentParticipants || 0})
+
+  Bao gồm: ${inclusionsText}
+  Không bao gồm: ${exclusionsText}
+
+  Đánh giá: ${tour.rating || 0}/5 (${tour.reviewCount || 0} đánh giá)
 
   Lịch trình:
-  ${tour.itinerary.map(i => `Ngày ${i.day}: ${i.title} - ${i.description}`).join("\n")}
+  ${scheduleText || "Chưa có lịch trình"}
 
-  Ngày khởi hành: ${new Date(tour.startDate).toLocaleDateString("vi-VN")}
+  Ngày khởi hành: ${tour.startDate ? new Date(tour.startDate).toLocaleDateString("vi-VN") : "Chưa xác định"}
 
   LỊCH SỬ HỘI THOẠI:
   ${historyText || "(Chưa có)"}

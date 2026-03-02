@@ -1,4 +1,4 @@
-import User from "../models/User.js";
+import Customer from "../models/Customer.js";
 import {
   hashPassword,
   comparePassword,
@@ -19,33 +19,35 @@ export const register = async (req, res) => {
     if (!validation.isValid)
       return res.status(400).json({ status: false, errors: validation.errors });
 
-    const exists = await User.findOne({ email: email.toLowerCase() });
+    const exists = await Customer.findOne({ email: email.toLowerCase() });
     if (exists)
       return res.status(400).json({ status: false, message: "Email đã tồn tại" });
 
-    const user = await User.create({
+    const customer = await Customer.create({
       fullName: fullName.trim(),
       email: email.toLowerCase(),
       password: await hashPassword(password),
-
-      phone: "",
-      gender: "",
-      birthDay: null,
-      address: "",
-      favourite_tours: [],
-
+      phoneNumber: "",
+      avatarUrl: null,
+      address: {},
+      segment: "New",
+      status: "Active",
+      stats: { loyaltyPoints: 0, lastActivity: new Date() },
       emailVerified: false,
-      phoneVerified: false,
       tokenVersion: 0
     });
 
-    const token = generateToken(user._id, user.tokenVersion);
+    const token = generateToken(customer, "customer");
+
+    // Don't return password
+    const customerData = customer.toObject();
+    delete customerData.password;
 
     res.status(201).json({
       status: true,
-      data: { user, token }
+      data: { customer: customerData, token }
     });
-  } 
+  }
   catch (err) {
     res.status(500).json({ status: false, error: err.message });
   }
@@ -60,14 +62,25 @@ export const login = async (req, res) => {
     if (!validation.isValid)
       return res.status(400).json({ status: false, errors: validation.errors });
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
-    if (!user || !(await comparePassword(password, user.password)))
+    const customer = await Customer.findOne({ email: email.toLowerCase() }).select("+password");
+    if (!customer || !(await comparePassword(password, customer.password)))
       return res.status(401).json({ status: false, message: "Sai thông tin đăng nhập" });
 
-    const token = generateToken(user);
+    if (customer.status === "Banned")
+      return res.status(403).json({ status: false, message: "Tài khoản đã bị khóa" });
 
-    res.json({ status: true, data: { user, token } });
-  } 
+    // Update last activity
+    customer.stats.lastActivity = new Date();
+    await customer.save();
+
+    const token = generateToken(customer, "customer");
+
+    // Don't return password
+    const customerData = customer.toObject();
+    delete customerData.password;
+
+    res.json({ status: true, data: { customer: customerData, token } });
+  }
   catch (err) {
     res.status(500).json({ status: false, error: err.message });
   }
@@ -76,7 +89,7 @@ export const login = async (req, res) => {
 export const me = async (req, res) => {
   try {
     await connectDB();
-    res.json({ status: true, data: req.user });
+    res.json({ status: true, data: req.customer });
   } catch (err) {
     res.status(500).json({ status: false, error: err.message });
   }
@@ -84,124 +97,123 @@ export const me = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-
-  await connectDB();
-  const user = req.user;
-  if (!user) return res.status(401).json({status: false, message: "Không tìm thấy người dùng"});
-  user.tokenVersion = (user.tokenVersion || 0) + 1;
-  await user.save();
-  res.status(200).json({status: true, message: "Đăng xuất thành công" });
+    await connectDB();
+    const customer = req.customer;
+    if (!customer) return res.status(401).json({ status: false, message: "Không tìm thấy tài khoản" });
+    customer.tokenVersion = (customer.tokenVersion || 0) + 1;
+    await customer.save();
+    res.status(200).json({ status: true, message: "Đăng xuất thành công" });
   }
-  catch (err){
+  catch (err) {
     console.log("Lỗi khi đăng xuất: " + err);
-    res.status(500).json({status: false, message: "Lỗi server"});
+    res.status(500).json({ status: false, message: "Lỗi server" });
   }
 };
 
 // Forgot Password (OTP)
-export const forgotPassword = async (req,res)=>{
+export const forgotPassword = async (req, res) => {
   try {
     await connectDB();
     const { email } = req.body;
-    if(!email) return res.status(400).json({ status:false, message:"Vui lòng nhập email" });
+    if (!email) return res.status(400).json({ status: false, message: "Vui lòng nhập email" });
 
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if(!user) return res.status(404).json({ status:false, message:"Email chưa được đăng ký trên hệ thống!" });
+    const customer = await Customer.findOne({ email: email.toLowerCase() });
+    if (!customer) return res.status(404).json({ status: false, message: "Email chưa được đăng ký trên hệ thống!" });
 
-    const otpId = await createAndSendOTP(email,'forgot_password');
+    const otpId = await createAndSendOTP(email, 'forgot_password');
 
-    res.status(200).json({ status:true, otpId: otpId, message:"Mã OTP đã được gửi đến email của bạn." });
-  } 
-  catch(err){
+    res.status(200).json({ status: true, otpId: otpId, message: "Mã OTP đã được gửi đến email của bạn." });
+  }
+  catch (err) {
     console.error("Forgot password error:", err);
-    res.status(500).json({ status:false, message:"Lỗi server", error:err.message });
+    res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
   }
 };
 
 // Resend OTP
-export const resendOtp = async (req,res)=>{
+export const resendOtp = async (req, res) => {
   try {
     await connectDB();
     const { email } = req.body;
-    if(!email) return res.status(400).json({ status:false, message:"Vui lòng nhập email" });
+    if (!email) return res.status(400).json({ status: false, message: "Vui lòng nhập email" });
 
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if(!user) return res.status(404).json({ status:false, message:"Email chưa được đăng ký trên hệ thống!" });
+    const customer = await Customer.findOne({ email: email.toLowerCase() });
+    if (!customer) return res.status(404).json({ status: false, message: "Email chưa được đăng ký trên hệ thống!" });
 
-    const otpId = await createAndSendOTP(email,'forgot_password');
+    const otpId = await createAndSendOTP(email, 'forgot_password');
 
-    res.status(200).json({ status:true, otpId: otpId, message:"Mã OTP đã được gửi đến email của bạn." });
-  } 
-  catch(err){
+    res.status(200).json({ status: true, otpId: otpId, message: "Mã OTP đã được gửi đến email của bạn." });
+  }
+  catch (err) {
     console.error("Forgot password error:", err);
-    res.status(500).json({ status:false, message:"Lỗi server", error:err.message });
+    res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
   }
 };
 
 //Verify OTP
-export const verifyOtp = async(req,res)=>{
-  try{
+export const verifyOtp = async (req, res) => {
+  try {
     await connectDB();
-    const {otpId, otp}=req.body;
-    if(!otpId||!otp) return res.status(400).json({status:false,message:"Vui lòng nhập đầy đủ thông tin"});
+    const { otpId, otp } = req.body;
+    if (!otpId || !otp) return res.status(400).json({ status: false, message: "Vui lòng nhập đầy đủ thông tin" });
 
-    const result = await verifyOTP(otpId, otp,'forgot_password');
-    if(!result.success) return res.status(400).json({status:false,message:result.message});
+    const result = await verifyOTP(otpId, otp, 'forgot_password');
+    if (!result.success) return res.status(400).json({ status: false, message: result.message });
 
-    res.json({status:true,message:"Xác thực OTP thành công", otpId: result.otpId});
+    res.json({ status: true, message: "Xác thực OTP thành công", otpId: result.otpId });
   }
-  catch(err){
-    console.error("Verify OTP error:",err);
-    res.status(500).json({status:false,message:"Lỗi server",error:err.message});
+  catch (err) {
+    console.error("Verify OTP error:", err);
+    res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
   }
 };
 
 // Reset Password (OTP)
-export const resetPassword = async (req,res)=>{
-  try{
+export const resetPassword = async (req, res) => {
+  try {
     await connectDB();
     const { otpId, newPassword } = req.body;
-    if(!otpId||!newPassword) return res.status(400).json({ status:false, message:"Vui lòng nhập đầy đủ thông tin" });
-    if(newPassword.length<6) return res.status(400).json({ status:false, message:"Mật khẩu phải có ít nhất 6 ký tự" });
+    if (!otpId || !newPassword) return res.status(400).json({ status: false, message: "Vui lòng nhập đầy đủ thông tin" });
+    if (newPassword.length < 6) return res.status(400).json({ status: false, message: "Mật khẩu phải có ít nhất 6 ký tự" });
 
     const email = await getVerifiedEmailByOtpId(otpId, 'forgot_password');
-    if(!email) {
-        return res.status(400).json({ status:false, message: "Phiên xác thực không hợp lệ hoặc đã hết hạn. Vui lòng làm lại." });
+    if (!email) {
+      return res.status(400).json({ status: false, message: "Phiên xác thực không hợp lệ hoặc đã hết hạn. Vui lòng làm lại." });
     }
 
     const hashedPassword = await hashPassword(newPassword);
-    const user = await User.findOneAndUpdate({ email: email.toLowerCase() }, { password: hashedPassword }, { new:true });
-    if(!user) return res.status(404).json({ status:false, message:"Không tìm thấy người dùng" });
+    const customer = await Customer.findOneAndUpdate({ email: email.toLowerCase() }, { password: hashedPassword }, { new: true });
+    if (!customer) return res.status(404).json({ status: false, message: "Không tìm thấy tài khoản" });
 
-    res.status(200).json({ status:true, message:"Đặt lại mật khẩu thành công!" });
-  }catch(err){
+    res.status(200).json({ status: true, message: "Đặt lại mật khẩu thành công!" });
+  } catch (err) {
     console.error("Reset password error:", err);
-    res.status(500).json({ status:false, message:"Lỗi server", error:err.message });
+    res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
   }
 };
 
 // Change Password
-export const changePassword = async (req,res)=>{
-  try{
+export const changePassword = async (req, res) => {
+  try {
     await connectDB();
     const { email, currentPassword, newPassword } = req.body;
-    if(!email||!currentPassword||!newPassword) return res.status(400).json({ status:false, message:"Vui lòng nhập đầy đủ thông tin" });
-    if(newPassword.length<6) return res.status(400).json({ status:false, message:"Mật khẩu mới phải có ít nhất 6 ký tự" });
-    if(currentPassword===newPassword) return res.status(400).json({ status:false, message:"Mật khẩu mới không được trùng mật khẩu cũ" });
+    if (!email || !currentPassword || !newPassword) return res.status(400).json({ status: false, message: "Vui lòng nhập đầy đủ thông tin" });
+    if (newPassword.length < 6) return res.status(400).json({ status: false, message: "Mật khẩu mới phải có ít nhất 6 ký tự" });
+    if (currentPassword === newPassword) return res.status(400).json({ status: false, message: "Mật khẩu mới không được trùng mật khẩu cũ" });
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-    if(!user) return res.status(404).json({ status:false, message:"Không tìm thấy người dùng" });
+    const customer = await Customer.findOne({ email: email.toLowerCase() }).select('+password');
+    if (!customer) return res.status(404).json({ status: false, message: "Không tìm thấy tài khoản" });
 
-    const isPasswordValid = await comparePassword(currentPassword, user.password);
-    if(!isPasswordValid) return res.status(401).json({ status:false, message:"Mật khẩu hiện tại không đúng" });
+    const isPasswordValid = await comparePassword(currentPassword, customer.password);
+    if (!isPasswordValid) return res.status(401).json({ status: false, message: "Mật khẩu hiện tại không đúng" });
 
-    user.password = await hashPassword(newPassword);
-    await user.save();
+    customer.password = await hashPassword(newPassword);
+    await customer.save();
 
-    res.status(200).json({ status:true, message:"Đổi mật khẩu thành công!" });
-  }catch(err){
+    res.status(200).json({ status: true, message: "Đổi mật khẩu thành công!" });
+  } catch (err) {
     console.error("Change password error:", err);
-    res.status(500).json({ status:false, message:"Lỗi server", error:err.message });
+    res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
   }
 };
 

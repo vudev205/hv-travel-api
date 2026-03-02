@@ -18,10 +18,11 @@ export async function comparePassword(password, hashedPassword) {
 }
 
 // Tạo JWT token
-export function generateToken(user) {
-  return jwt.sign({ 
+export function generateToken(user, role = "user") {
+  return jwt.sign({
     id: user._id,
-    tokenVersion: user.tokenVersion
+    tokenVersion: user.tokenVersion,
+    role
   }, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN
   });
