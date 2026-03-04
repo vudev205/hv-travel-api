@@ -25,7 +25,20 @@ export const listFavourites = async (req, res) => {
       .lean();
 
     // Filter out any where tour was deleted/inactive (populated as null)
-    const validFavourites = favourites.filter((f) => f.tourId !== null);
+    const validFavourites = favourites
+      .filter((f) => f.tourId !== null && typeof f.tourId === 'object')
+      .map((f) => {
+        const tour = f.tourId;
+        if (tour && tour.price) {
+          tour.price = {
+            adult: Number(tour.price.adult || 0),
+            child: Number(tour.price.child || 0),
+            infant: Number(tour.price.infant || 0),
+            discount: Number(tour.price.discount || 0),
+          };
+        }
+        return f;
+      });
 
     return res.status(200).json({
       status: true,

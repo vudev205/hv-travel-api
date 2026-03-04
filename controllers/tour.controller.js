@@ -56,17 +56,16 @@ export const tourDetail = async (req, res) => {
     }
 
     // Transform Decimal128 to Number
-    const transformedTour = {
-      ...tour,
-      price: {
-        adult: Number(tour.price.adult),
-        child: Number(tour.price.child),
-        infant: Number(tour.price.infant),
+    if (tour.price) {
+      tour.price = {
+        adult: Number(tour.price.adult || 0),
+        child: Number(tour.price.child || 0),
+        infant: Number(tour.price.infant || 0),
         discount: Number(tour.price.discount || 0)
-      }
-    };
+      };
+    }
 
-    return res.json({ status: true, data: transformedTour });
+    return res.json({ status: true, data: tour });
   } catch (e) {
     console.error("tourDetail error:", e);
     return res.status(500).json({ status: false, message: "Không lấy được chi tiết tour" });
