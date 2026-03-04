@@ -26,7 +26,11 @@ export const createBooking = async (req, res) => {
     }
 
     // Check tour exists and is active
-    const tour = await Tour.findOne({ _id: tourId, deleted: false, status: "active" }).lean();
+    const tour = await Tour.findOne({
+      _id: tourId,
+      deleted: { $ne: true },
+      status: { $ne: "inactive" },
+    }).lean();
     if (!tour) {
       return res.status(404).json({ status: false, message: "Tour không tồn tại hoặc không khả dụng" });
     }

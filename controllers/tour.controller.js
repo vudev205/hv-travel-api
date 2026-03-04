@@ -23,7 +23,18 @@ export const listTours = async (req, res) => {
       .select("_id name category destination images duration price rating reviewCount maxParticipants currentParticipants startDate")
       .lean();
 
-    return res.json({ status: true, count: tours.length, data: tours });
+    // Transform Decimal128 to Number
+    const transformedTours = tours.map(t => ({
+      ...t,
+      price: {
+        adult: Number(t.price.adult),
+        child: Number(t.price.child),
+        infant: Number(t.price.infant),
+        discount: Number(t.price.discount || 0)
+      }
+    }));
+
+    return res.json({ status: true, count: transformedTours.length, data: transformedTours });
   } catch (e) {
     console.error("listTours error:", e);
     return res.status(500).json({ status: false, message: "Không lấy được danh sách tour" });
@@ -44,7 +55,18 @@ export const tourDetail = async (req, res) => {
       return res.status(404).json({ status: false, message: "Tour không tồn tại" });
     }
 
-    return res.json({ status: true, data: tour });
+    // Transform Decimal128 to Number
+    const transformedTour = {
+      ...tour,
+      price: {
+        adult: Number(tour.price.adult),
+        child: Number(tour.price.child),
+        infant: Number(tour.price.infant),
+        discount: Number(tour.price.discount || 0)
+      }
+    };
+
+    return res.json({ status: true, data: transformedTour });
   } catch (e) {
     console.error("tourDetail error:", e);
     return res.status(500).json({ status: false, message: "Không lấy được chi tiết tour" });

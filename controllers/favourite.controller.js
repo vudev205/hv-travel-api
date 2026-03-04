@@ -19,7 +19,7 @@ export const listFavourites = async (req, res) => {
       .populate({
         path: "tourId",
         select: "_id name category destination images duration price rating reviewCount",
-        match: { deleted: false, status: "active" },
+        match: { deleted: { $ne: true }, status: { $ne: "inactive" } },
       })
       .sort({ createdAt: -1 })
       .lean();
@@ -57,7 +57,11 @@ export const addFavouriteByTourId = async (req, res) => {
     }
 
     // Check tour exists
-    const tour = await Tour.findOne({ _id: tourId, deleted: false, status: "active" }).lean();
+    const tour = await Tour.findOne({
+      _id: tourId,
+      deleted: { $ne: true },
+      status: { $ne: "inactive" },
+    }).lean();
     if (!tour) {
       return res.status(404).json({ status: false, message: "Không tìm thấy tour" });
     }
