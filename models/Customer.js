@@ -96,7 +96,6 @@ customerSchema.pre("save", async function (next) {
 });
 
 // Indexes
-customerSchema.index({ customerCode: 1 });
 customerSchema.index({ status: 1, segment: 1 });
 
 const Customer =

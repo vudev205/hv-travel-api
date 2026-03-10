@@ -113,7 +113,7 @@ function buildPrompt(tour, history, userMessage) {
   - Trả lời ngắn gọn, dễ hiểu, thân thiện
   - Nếu khách hỏi giá → dùng giá và nêu rõ giảm giá nếu có
   - Nếu khách hỏi lịch trình → tóm tắt theo ngày
-  - Nếu khách hỏi số chỗ → trả lời theo maxParticipants
+  - Nếu khách hỏi số chỗ → trả lời theo max_participants
   - Nếu không có thông tin → nói "Hiện tour chưa có thông tin này"
 
   THÔNG TIN TOUR:
@@ -129,17 +129,17 @@ function buildPrompt(tour, history, userMessage) {
   - Em bé: ${infantPrice.toLocaleString("vi-VN")} VND
   ${discount > 0 ? `- Giảm giá: ${discount}%` : ""}
 
-  Số chỗ: ${tour.maxParticipants || "Không giới hạn"} (đã đặt: ${tour.currentParticipants || 0})
+  Số chỗ: ${tour.max_participants || "Không giới hạn"} (đã đặt: ${tour.current_participants || 0})
 
   Bao gồm: ${inclusionsText}
   Không bao gồm: ${exclusionsText}
 
-  Đánh giá: ${tour.rating || 0}/5 (${tour.reviewCount || 0} đánh giá)
+  Đánh giá: ${tour.rating || 0}/5 (${tour.review_count || 0} đánh giá)
 
   Lịch trình:
   ${scheduleText || "Chưa có lịch trình"}
 
-  Ngày khởi hành: ${tour.startDate ? new Date(tour.startDate).toLocaleDateString("vi-VN") : "Chưa xác định"}
+  Ngày khởi hành: ${tour.start_dates && tour.start_dates.length > 0 ? new Date(tour.start_dates[0]).toLocaleDateString("vi-VN") : "Chưa xác định"}
 
   LỊCH SỬ HỘI THOẠI:
   ${historyText || "(Chưa có)"}

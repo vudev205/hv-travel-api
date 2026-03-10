@@ -66,23 +66,28 @@ const TourSchema = new Schema(
     schedule: { type: [ScheduleSchema], default: [] },
 
     // Replaces stock
-    maxParticipants: { type: Number, default: 0 },
-    currentParticipants: { type: Number, default: 0 },
+    max_participants: { type: Number, default: 0 },
+    current_participants: { type: Number, default: 0 },
 
     // Replaces vehicle and accomodations
     inclusions: { type: [String], default: [] },
     exclusions: { type: [String], default: [] },
 
     // Cached from Reviews collection
-    reviewCount: { type: Number, default: 0 },
+    review_count: { type: Number, default: 0 },
     rating: { type: Number, default: 0 },
 
-    startDate: { type: Date, required: true },
+    start_dates: { type: [Date], default: [] },
 
-    status: { type: String, enum: ["active", "inactive"], default: "active" },
-    deleted: { type: Boolean, default: false },
+    status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
+    is_deleted: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  {
+    timestamps: {
+      createdAt: 'created_at',
+      updatedAt: 'updated_at'
+    }
+  }
 );
 
 // Indexes

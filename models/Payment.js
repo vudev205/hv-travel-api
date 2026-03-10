@@ -38,7 +38,6 @@ const paymentSchema = new Schema(
 );
 
 // Indexes
-paymentSchema.index({ bookingId: 1 });
 paymentSchema.index({ status: 1 });
 
 const Payment =

@@ -28,15 +28,15 @@ export const createPayment = async (req, res) => {
     // Check booking exists and belongs to customer
     const booking = await Booking.findOne({
       _id: bookingId,
-      customerId: req.customer._id,
-      isDeleted: false,
+      customer_id: req.customer._id,
+      is_deleted: false,
     });
 
     if (!booking) {
       return res.status(404).json({ status: false, message: "Booking không tồn tại" });
     }
 
-    if (booking.paymentStatus === "Paid") {
+    if (booking.payment_status === "Paid") {
       return res.status(400).json({ status: false, message: "Booking đã được thanh toán" });
     }
 
@@ -49,12 +49,15 @@ export const createPayment = async (req, res) => {
       paymentDate: new Date(),
     });
 
+    const customerName = req.customer.fullName || req.customer.name || "";
+
     // Update booking payment status
-    booking.paymentStatus = "Paid";
+    booking.payment_status = "Paid";
     booking.status = "Confirmed";
-    booking.historyLog.push({
-      status: "Paid",
+    booking.history_log.push({
+      action: "Thanh toán thành công",
       timestamp: new Date(),
+      user: customerName,
       note: `Thanh toán ${paymentMethod} - ${amount.toLocaleString("vi-VN")} VND`,
     });
     await booking.save();
@@ -91,7 +94,7 @@ export const listPayments = async (req, res) => {
       // Verify booking belongs to customer
       const booking = await Booking.findOne({
         _id: bookingId,
-        customerId: req.customer._id,
+        customer_id: req.customer._id,
       }).lean();
 
       if (!booking) {
@@ -101,7 +104,7 @@ export const listPayments = async (req, res) => {
       filter.bookingId = bookingId;
     } else {
       // Get all bookings for customer, then filter payments
-      const customerBookings = await Booking.find({ customerId: req.customer._id })
+      const customerBookings = await Booking.find({ customer_id: req.customer._id })
         .select("_id")
         .lean();
       const bookingIds = customerBookings.map((b) => b._id);

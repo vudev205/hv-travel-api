@@ -9,7 +9,7 @@ export const listTours = async (req, res) => {
     const start = Math.max(parseInt(req.query.start, 10) || 0, 0);
     const { category, city } = req.query;
 
-    const query = { deleted: { $ne: true }, status: { $ne: "inactive" } };
+    const query = { is_deleted: { $ne: true }, status: { $ne: "Inactive" } };
 
     // Filter by category name (string)
     if (category) query.category = category;
@@ -20,7 +20,7 @@ export const listTours = async (req, res) => {
     const tours = await Tour.find(query)
       .skip(start)
       .limit(limit)
-      .select("_id name category destination images duration price rating reviewCount maxParticipants currentParticipants startDate")
+      .select("_id name category destination images duration price rating review_count max_participants current_participants start_dates")
       .lean();
 
     // Transform Decimal128 to Number
@@ -47,8 +47,8 @@ export const tourDetail = async (req, res) => {
 
     const tour = await Tour.findOne({
       _id: req.params.id,
-      deleted: { $ne: true },
-      status: { $ne: "inactive" },
+      is_deleted: { $ne: true },
+      status: { $ne: "Inactive" },
     }).lean();
 
     if (!tour) {

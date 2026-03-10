@@ -3,73 +3,135 @@ import connectDB from "../config/db.js";
 import Booking from "../models/Booking.js";
 import Tour from "../models/Tour.js";
 
+// Generate booking code: HVyyyyMMddHHmmssSSS
+function generateBookingCode() {
+  const now = new Date();
+  const pad = (n, len = 2) => String(n).padStart(len, "0");
+  return (
+    "HV" +
+    now.getFullYear() +
+    pad(now.getMonth() + 1) +
+    pad(now.getDate()) +
+    pad(now.getHours()) +
+    pad(now.getMinutes()) +
+    pad(now.getSeconds()) +
+    pad(now.getMilliseconds(), 3)
+  );
+}
+
 // Create a new booking
 export const createBooking = async (req, res) => {
   try {
     await connectDB();
 
     const customerId = req.customer._id;
-    const { tourId, passengers, contactInfo, totalAmount } = req.body;
+    const customerName = req.customer.fullName || req.customer.name || "";
+    const { tour_id, passengers, contact_info, notes } = req.body;
 
-    // Validate tourId
-    if (!tourId || !mongoose.isValidObjectId(tourId)) {
-      return res.status(400).json({ status: false, message: "tourId không hợp lệ" });
+    // Validate tour_id
+    if (!tour_id || !mongoose.isValidObjectId(tour_id)) {
+      return res.status(400).json({ status: false, message: "tour_id không hợp lệ" });
     }
 
     // Validate required fields
-    if (!contactInfo || !contactInfo.fullName || !contactInfo.email || !contactInfo.phoneNumber) {
+    if (!contact_info || !contact_info.name || !contact_info.email || !contact_info.phone) {
       return res.status(400).json({ status: false, message: "Vui lòng nhập đầy đủ thông tin liên hệ" });
-    }
-
-    if (!totalAmount || totalAmount <= 0) {
-      return res.status(400).json({ status: false, message: "Tổng tiền không hợp lệ" });
     }
 
     // Check tour exists and is active
     const tour = await Tour.findOne({
-      _id: tourId,
-      deleted: { $ne: true },
-      status: { $ne: "inactive" },
+      _id: tour_id,
+      is_deleted: { $ne: true },
+      status: { $ne: "Inactive" },
     }).lean();
     if (!tour) {
       return res.status(404).json({ status: false, message: "Tour không tồn tại hoặc không khả dụng" });
     }
 
+    // Build passengers with full schema
+    const passengerList = passengers || [];
+    const formattedPassengers = passengerList.map((p) => ({
+      full_name: p.full_name || "",
+      birth_date: p.birth_date || null,
+      type: p.type || "Adult",
+      gender: p.gender || null,
+      passport_number: p.passport_number || null,
+    }));
+
+    // SERVER-SIDE PRICE CALCULATION
+    const adultCount = formattedPassengers.filter((p) => p.type === "Adult").length;
+    const childCount = formattedPassengers.filter((p) => p.type === "Child").length;
+    const infantCount = formattedPassengers.filter((p) => p.type === "Infant").length;
+
+    const baseAdult = tour.price?.adult || 0;
+    const baseChild = tour.price?.child || 0;
+    const baseInfant = tour.price?.infant || 0;
+    const discountPercent = tour.price?.discount || 0;
+
+    const priceAdult = discountPercent > 0 ? Math.round(baseAdult * (1 - discountPercent / 100)) : baseAdult;
+
+    // Subtotal
+    const subtotal = (adultCount * priceAdult) + (childCount * baseChild) + (infantCount * baseInfant);
+
+    // Hardcoded fees matching app for now (should come from settings/config later)
+    const serviceFee = 6000000;
+    const promoDiscount = 5500000;
+    const finalTotal = subtotal + serviceFee - promoDiscount;
+
     // Check capacity
-    const passengerCount = passengers ? passengers.length : 0;
-    if (tour.maxParticipants > 0 && (tour.currentParticipants + passengerCount) > tour.maxParticipants) {
+    const passengerCount = formattedPassengers.length;
+    if (tour.max_participants > 0 && (tour.current_participants + passengerCount) > tour.max_participants) {
       return res.status(400).json({ status: false, message: "Tour đã hết chỗ" });
     }
 
-    // Create tour snapshot
-    const tourSnapshot = {
-      date: tour.startDate,
+    // Build tour snapshot
+    const tour_snapshot = {
+      code: tour.code || "",
       name: tour.name,
+      start_date: (tour.start_dates && tour.start_dates.length > 0) ? tour.start_dates[0] : null,
       duration: tour.duration?.text || "",
     };
 
+    const parts = [];
+    if (adultCount > 0) parts.push(`${adultCount} người lớn`);
+    if (childCount > 0) parts.push(`${childCount} trẻ em`);
+    if (infantCount > 0) parts.push(`${infantCount} em bé`);
+
+    const now = new Date();
+    const booking_code = generateBookingCode();
+
     const booking = await Booking.create({
-      customerId,
-      tourId,
-      tourSnapshot,
-      passengers: passengers || [],
-      contactInfo,
-      totalAmount,
-      paymentStatus: "Pending",
+      booking_code,
+      tour_id,
+      tour_snapshot,
+      customer_id: customerId,
+      booking_date: now,
+      total_amount: mongoose.Types.Decimal128.fromString(String(Math.max(0, finalTotal))),
       status: "Pending",
-      historyLog: [
+      payment_status: "Unpaid",
+      participants_count: passengerCount,
+      passengers: formattedPassengers,
+      contact_info,
+      notes: notes || "",
+      history_log: [
         {
-          status: "Pending",
-          timestamp: new Date(),
-          note: "Đặt tour mới",
+          action: "Tạo đơn đặt tour",
+          timestamp: now,
+          user: contact_info.name || customerName,
+          note: parts.length > 0 ? `Đặt ${parts.join(", ")}` : "Đặt tour mới",
         },
       ],
+      created_at: now,
+      updated_at: now,
+      is_deleted: false,
+      deleted_by: null,
+      deleted_at: null,
     });
 
-    // Update currentParticipants on Tour
+    // Update current_participants on Tour
     if (passengerCount > 0) {
-      await Tour.findByIdAndUpdate(tourId, {
-        $inc: { currentParticipants: passengerCount },
+      await Tour.findByIdAndUpdate(tour_id, {
+        $inc: { current_participants: passengerCount },
       });
     }
 
@@ -92,7 +154,7 @@ export const listBookings = async (req, res) => {
     const customerId = req.customer._id;
     const { status, page = 1, limit = 20 } = req.query;
 
-    const filter = { customerId, isDeleted: false };
+    const filter = { customer_id: customerId, is_deleted: false };
     if (status) filter.status = status;
 
     const skip = (Math.max(parseInt(page), 1) - 1) * Math.min(parseInt(limit) || 20, 50);
@@ -100,9 +162,10 @@ export const listBookings = async (req, res) => {
 
     const [bookings, total] = await Promise.all([
       Booking.find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ created_at: -1 })
         .skip(skip)
         .limit(limitNum)
+        .select('_id tour_snapshot status booking_date created_at booking_code')
         .lean(),
       Booking.countDocuments(filter),
     ]);
@@ -132,8 +195,8 @@ export const getBooking = async (req, res) => {
 
     const booking = await Booking.findOne({
       _id: id,
-      customerId: req.customer._id,
-      isDeleted: false,
+      customer_id: req.customer._id,
+      is_deleted: false,
     }).lean();
 
     if (!booking) {
@@ -166,8 +229,8 @@ export const updateBookingStatus = async (req, res) => {
 
     const booking = await Booking.findOne({
       _id: id,
-      customerId: req.customer._id,
-      isDeleted: false,
+      customer_id: req.customer._id,
+      is_deleted: false,
     });
 
     if (!booking) {
@@ -181,15 +244,18 @@ export const updateBookingStatus = async (req, res) => {
     // Restore participants count
     const passengerCount = booking.passengers ? booking.passengers.length : 0;
     if (passengerCount > 0) {
-      await Tour.findByIdAndUpdate(booking.tourId, {
-        $inc: { currentParticipants: -passengerCount },
+      await Tour.findByIdAndUpdate(booking.tour_id, {
+        $inc: { current_participants: -passengerCount },
       });
     }
 
+    const customerName = req.customer.fullName || req.customer.name || "";
+
     booking.status = "Cancelled";
-    booking.historyLog.push({
-      status: "Cancelled",
+    booking.history_log.push({
+      action: "Hủy đơn đặt tour",
       timestamp: new Date(),
+      user: customerName,
       note: note || "Khách hàng hủy booking",
     });
 
@@ -202,6 +268,56 @@ export const updateBookingStatus = async (req, res) => {
     });
   } catch (err) {
     console.error("updateBookingStatus error:", err);
+    return res.status(500).json({ status: false, message: "Lỗi server" });
+  }
+};
+
+// Calculate price quote
+export const calculatePrice = async (req, res) => {
+  try {
+    await connectDB();
+    const { tour_id, adult_count = 0, child_count = 0, infant_count = 0 } = req.body;
+
+    if (!tour_id || !mongoose.isValidObjectId(tour_id)) {
+      return res.status(400).json({ status: false, message: "tour_id không hợp lệ" });
+    }
+
+    const tour = await Tour.findOne({
+      _id: tour_id,
+      is_deleted: { $ne: true },
+    }).lean();
+
+    if (!tour) {
+      return res.status(404).json({ status: false, message: "Tour không tồn tại" });
+    }
+
+    const baseAdult = tour.price?.adult || 0;
+    const baseChild = tour.price?.child || 0;
+    const baseInfant = tour.price?.infant || 0;
+    const discountPercent = tour.price?.discount || 0;
+
+    const priceAdult = discountPercent > 0 ? Math.round(baseAdult * (1 - discountPercent / 100)) : baseAdult;
+    const subtotal = (adult_count * priceAdult) + (child_count * baseChild) + (infant_count * baseInfant);
+
+    const serviceFee = 6000000;
+    const promoDiscount = 5500000;
+    const total = subtotal + serviceFee - promoDiscount;
+
+    return res.json({
+      status: true,
+      data: {
+        subtotal,
+        service_fee: serviceFee,
+        promo_discount: promoDiscount,
+        total: Math.max(0, total),
+        price_per_adult: priceAdult,
+        price_per_child: baseChild,
+        price_per_infant: baseInfant,
+        discount_percent: discountPercent
+      }
+    });
+  } catch (err) {
+    console.error("calculatePrice error:", err);
     return res.status(500).json({ status: false, message: "Lỗi server" });
   }
 };
