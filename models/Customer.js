@@ -83,7 +83,7 @@ const customerSchema = new Schema(
       default: 0,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "Customers" }
 );
 
 // Auto-generate customerCode before saving

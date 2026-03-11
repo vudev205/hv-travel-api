@@ -129,7 +129,7 @@ const bookingSchema = new Schema(
       default: null,
     },
   },
-  { timestamps: false }
+  { timestamps: false, collection: "Bookings" }
 );
 
 // Auto-update updated_at on save

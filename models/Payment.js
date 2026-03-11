@@ -34,7 +34,7 @@ const paymentSchema = new Schema(
       default: Date.now,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "Payments" }
 );
 
 // Indexes

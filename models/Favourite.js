@@ -17,7 +17,7 @@ const favouriteSchema = new Schema(
       index: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "Favourites" }
 );
 
 // One favourite per customer per tour

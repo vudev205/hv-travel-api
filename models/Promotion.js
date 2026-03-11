@@ -43,7 +43,7 @@ const promotionSchema = new Schema(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "Promotions" }
 );
 
 // Indexes

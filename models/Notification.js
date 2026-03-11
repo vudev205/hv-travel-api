@@ -30,7 +30,7 @@ const notificationSchema = new Schema(
       default: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "Notifications" }
 );
 
 // Indexes

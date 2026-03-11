@@ -32,7 +32,7 @@ const reviewSchema = new Schema(
       default: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "Reviews" }
 );
 
 // One review per customer per tour
