@@ -10,6 +10,7 @@ import reviewRoutes from "./routes/review.routes.js";
 import customerRoutes from "./routes/customer.routes.js";
 import testRoutes from "./routes/test.routes.js";
 import chatbotRoutes from "./routes/chatbot.routes.js";
+import chatRoutes from "./routes/chat.routes.js";
 import connectDB from "./config/db.js";
 
 const app = express();
@@ -25,6 +26,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api/chatbot", chatbotRoutes);
+app.use("/api/chat", chatRoutes);
 
 app.get("/", (_, res) => {
   res.json({
@@ -42,6 +44,7 @@ app.get("/", (_, res) => {
       payments: "GET/POST /api/payments",
       reviews: "GET/POST /api/reviews",
       customerProfile: "GET/PUT /api/customers/profile",
+      chat: "GET /api/chat/conversations",
     }
   });
 });
