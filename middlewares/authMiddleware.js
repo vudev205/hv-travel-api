@@ -49,6 +49,7 @@ export async function auth(req, res, next) {
 // Customer auth middleware — looks up Customer model (for mobile app)
 export async function customerAuth(req, res, next) {
   try {
+    await connectDB();
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {

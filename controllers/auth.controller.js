@@ -91,7 +91,7 @@ export const me = async (req, res) => {
     await connectDB();
     res.json({ status: true, data: req.customer });
   } catch (err) {
-    res.status(500).json({ status: false, error: err.message });
+    res.status(500).json({ status: false, error: err.message});
   }
 };
 
