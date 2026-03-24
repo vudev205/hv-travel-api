@@ -165,14 +165,19 @@ export const listBookings = async (req, res) => {
         .sort({ created_at: -1 })
         .skip(skip)
         .limit(limitNum)
-        .select('_id tourId tour_snapshot status booking_date created_at booking_code')
+        .select('_id tour_id tour_snapshot status booking_date created_at booking_code')
         .lean(),
       Booking.countDocuments(filter),
     ]);
 
+    const normalizedBookings = bookings.map((booking) => ({
+      ...booking,
+      tourId: booking.tour_id,
+    }));
+
     return res.json({
       status: true,
-      data: bookings,
+      data: normalizedBookings,
       total,
       page: parseInt(page) || 1,
       totalPages: Math.ceil(total / limitNum),

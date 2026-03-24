@@ -32,6 +32,7 @@ app.get("/", (_, res) => {
   res.json({
     status: true,
     message: "HV-Travel API running",
+    status_mongodb: connectDB ? "Connected" : "Not Connected",
     endpoints: {
       test: "/api/test",
       tours: "GET /api/tours/list",
