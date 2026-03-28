@@ -36,7 +36,8 @@ export const createPayment = async (req, res) => {
       return res.status(404).json({ status: false, message: "Booking không tồn tại" });
     }
 
-    if (booking.payment_status === "Paid") {
+    const paidStatuses = new Set(["Paid", "Full"]);
+    if (paidStatuses.has(booking.payment_status)) {
       return res.status(400).json({ status: false, message: "Booking đã được thanh toán" });
     }
 
@@ -52,7 +53,7 @@ export const createPayment = async (req, res) => {
     const customerName = req.customer.fullName || req.customer.name || "";
 
     // Update booking payment status
-    booking.payment_status = "Paid";
+    booking.payment_status = "Full";
     booking.status = "Confirmed";
     booking.history_log.push({
       action: "Thanh toán thành công",

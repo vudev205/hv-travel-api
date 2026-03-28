@@ -4,7 +4,7 @@ import validator from "validator";
 
 // Secret key cho JWT (nên lưu trong .env)
 const JWT_SECRET = process.env.JWT_SECRET || "HV-Travel-Vip-Pro";
-const JWT_EXPIRES_IN = "365d"; // Token hết hạn sau 7 ngày
+export const ACCESS_TOKEN_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || "15m";
 
 // Hash password
 export async function hashPassword(password) {
@@ -18,13 +18,14 @@ export async function comparePassword(password, hashedPassword) {
 }
 
 // Tạo JWT token
-export function generateToken(user, role = "user") {
+export function generateToken(user, role = "user", sessionId = null) {
   return jwt.sign({
     id: user._id,
     tokenVersion: user.tokenVersion,
-    role
+    role,
+    sessionId,
   }, JWT_SECRET, {
-    expiresIn: JWT_EXPIRES_IN
+    expiresIn: ACCESS_TOKEN_EXPIRES_IN
   });
 }
 

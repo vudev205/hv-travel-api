@@ -86,7 +86,11 @@ const bookingSchema = new Schema(
       enum: ["Pending", "Confirmed", "Paid", "Cancelled", "Completed"],
       default: "Pending",
     },
-    payment_status: { type: String, enum: ["Unpaid", "Full", "Refunded"], default: "Unpaid" },
+    payment_status: {
+      type: String,
+      enum: ["Unpaid", "Full", "Paid", "Refunded"],
+      default: "Unpaid",
+    },
     participants_count: {
       type: Number,
       default: 0,

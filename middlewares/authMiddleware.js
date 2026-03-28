@@ -39,6 +39,7 @@ export async function auth(req, res, next) {
     }
 
     req.user = user;
+    req.authSessionId = decoded.sessionId || null;
     next();
   } catch (err) {
     console.error("auth middleware error:", err);
@@ -94,6 +95,7 @@ export async function customerAuth(req, res, next) {
     }
 
     req.customer = customer;
+    req.authSessionId = decoded.sessionId || null;
     next();
   } catch (err) {
     console.error("customerAuth middleware error:", err);

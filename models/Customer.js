@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import validator from "validator";
+import { RefreshSessionSchema } from "./RefreshSession.js";
 
 const { Schema } = mongoose;
 
@@ -81,6 +82,10 @@ const customerSchema = new Schema(
     tokenVersion: {
       type: Number,
       default: 0,
+    },
+    refreshSessions: {
+      type: [RefreshSessionSchema],
+      default: [],
     },
   },
   { timestamps: true, collection: "Customers" }

@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 import connectDB from "../config/db.js";
 import Booking from "../models/Booking.js";
 import Tour from "../models/Tour.js";
+import {
+  resolveBookingStatus,
+  resolveTourSnapshotStartDate,
+  toBookingResponse,
+} from "../utils/bookingResponse.js";
 
 // Generate booking code: HVyyyyMMddHHmmssSSS
 function generateBookingCode() {
@@ -88,7 +93,7 @@ export const createBooking = async (req, res) => {
     const tour_snapshot = {
       code: tour.code || "",
       name: tour.name,
-      start_date: (tour.start_dates && tour.start_dates.length > 0) ? tour.start_dates[0] : null,
+      start_date: resolveTourSnapshotStartDate(contact_info?.selected_date, tour.start_dates),
       duration: tour.duration?.text || "",
     };
 
@@ -138,7 +143,7 @@ export const createBooking = async (req, res) => {
     return res.status(201).json({
       status: true,
       message: "Đặt tour thành công",
-      data: booking,
+      data: toBookingResponse(booking),
     });
   } catch (err) {
     console.error("createBooking error:", err);
@@ -165,15 +170,14 @@ export const listBookings = async (req, res) => {
         .sort({ created_at: -1 })
         .skip(skip)
         .limit(limitNum)
-        .select('_id tour_id tour_snapshot status booking_date created_at booking_code')
+        .select(
+          "_id customer_id tour_id tour_snapshot booking_code booking_date created_at updated_at status payment_status participants_count total_amount is_deleted"
+        )
         .lean(),
       Booking.countDocuments(filter),
     ]);
 
-    const normalizedBookings = bookings.map((booking) => ({
-      ...booking,
-      tourId: booking.tour_id,
-    }));
+    const normalizedBookings = bookings.map((booking) => toBookingResponse(booking));
 
     return res.json({
       status: true,
@@ -208,7 +212,7 @@ export const getBooking = async (req, res) => {
       return res.status(404).json({ status: false, message: "Booking không tồn tại" });
     }
 
-    return res.json({ status: true, data: booking });
+    return res.json({ status: true, data: toBookingResponse(booking) });
   } catch (err) {
     console.error("getBooking error:", err);
     return res.status(500).json({ status: false, message: "Lỗi server" });
@@ -242,7 +246,8 @@ export const updateBookingStatus = async (req, res) => {
       return res.status(404).json({ status: false, message: "Booking không tồn tại" });
     }
 
-    if (booking.status === "Cancelled" || booking.status === "Completed") {
+    const resolvedStatus = resolveBookingStatus(booking);
+    if (resolvedStatus === "Cancelled" || resolvedStatus === "Completed") {
       return res.status(400).json({ status: false, message: "Không thể hủy booking này" });
     }
 
@@ -269,7 +274,7 @@ export const updateBookingStatus = async (req, res) => {
     return res.json({
       status: true,
       message: "Đã hủy booking",
-      data: booking,
+      data: toBookingResponse(booking),
     });
   } catch (err) {
     console.error("updateBookingStatus error:", err);

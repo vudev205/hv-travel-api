@@ -111,6 +111,7 @@ function buildPrompt(tour, history, userMessage) {
   - Chỉ tư vấn dựa trên thông tin tour bên dưới
   - Không tự bịa thông tin nếu không có
   - Trả lời ngắn gọn, dễ hiểu, thân thiện
+  - Trả lời theo ngôn ngữ khách hỏi (VN hoặc EN hoặc các ngôn ngữ khác)
   - Nếu khách hỏi giá → dùng giá và nêu rõ giảm giá nếu có
   - Nếu khách hỏi lịch trình → tóm tắt theo ngày
   - Nếu khách hỏi số chỗ → trả lời theo max_participants
