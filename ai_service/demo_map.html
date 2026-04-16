@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HV-Travel: AI Heuristic TSP Demo</title>
+
+    <!-- CSS cho Bản đồ Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 350px;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        #map {
+            flex-grow: 1;
+            height: 100%;
+        }
+
+        h2 {
+            color: #2c3e50;
+            font-size: 1.2rem;
+        }
+
+        .poi-list {
+            list-style: None;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+
+        .poi-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .poi-item:hover {
+            background: #e9ecef;
+        }
+
+        .poi-item.selected {
+            background: #0d6efd;
+            color: white;
+            border-color: #0b5ed7;
+        }
+
+        .btn-run {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #198754;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .btn-run:hover {
+            background: #157347;
+        }
+
+        .btn-clear {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+
+        .btn-clear:hover {
+            background: #5c636a;
+        }
+
+        #results {
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+
+        .result-box {
+            padding: 10px;
+            background: #e8f4f8;
+            border-left: 4px solid #0dcaf0;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 10px;
+            color: #ff9800;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="sidebar">
+        <h2>🌍 Chọn Các Điểm Du Lịch</h2>
+        <p style="font-size: 0.85rem; color: #666;">Click chọn từ 3-7 điểm để thuật toán AI (Heuristic A*) vẽ đường đi
+            tối ưu nhất có tính đến chỉ số kẹt xe.</p>
+
+        <ul id="poiContainer" class="poi-list">
+            <!-- Render từ JS -->
+            <li>Đang tải dữ liệu...</li>
+        </ul>
+
+        <button class="btn-run" onclick="runAI()">🚀 Chạy Thuật Toán TSP</button>
+        <button class="btn-clear" onclick="clearMap()">🗑 Xóa Bản Đồ</button>
+        <div id="loading" class="loading">⏳ AI Đang tính toán ma trận...</div>
+
+        <div id="results"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- JS cho Bản đồ Leaflet và Axios -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        // Cấu hình AI API
+        const AI_API_URL = "http://localhost:8000/api";
+
+        let map;
+        let allPOIs = [];
+        let selectedPOIs = [];
+        let markers = {};
+        let polylines = [];
+
+        // 1. Khởi tạo bản đồ 
+        function initMap() {
+            map = L.map('map').setView([16.0544, 108.2022], 6); // Center ở Đà Nẵng
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://carto.com/">CARTO</a> | &copy; OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // 2. Lấy dữ liệu POIs từ Python
+        async function loadPOIs() {
+            try {
+                const res = await axios.get(`${AI_API_URL}/pois`);
+                allPOIs = res.data.data;
+                renderPOIList();
+                drawStandbyMarkers();
+            } catch (error) {
+                alert("Lỗi kết nối tới AI API. Hãy chắc chắn uvicorn đang chạy ở cổng 8000!");
+            }
+        }
+
+        // 3. Render Menu bên trái
+        function renderPOIList() {
+            const container = document.getElementById("poiContainer");
+            container.innerHTML = "";
+            allPOIs.forEach(poi => {
+                const li = document.createElement("li");
+                li.className = "poi-item";
+                li.innerHTML = `<strong>${poi.placeName}</strong> <span style="font-size:0.8rem; color:#888;">(${poi.province})</span>`;
+                li.onclick = () => toggleSelectPOI(poi._id, li);
+                container.appendChild(li);
+            });
+        }
+
+        function toggleSelectPOI(id, liElement) {
+            const index = selectedPOIs.indexOf(id);
+            if (index === -1) {
+                selectedPOIs.push(id);
+                liElement.classList.add("selected");
+                markers[id].setIcon(getIcon("red")); // Đổi màu Marker
+            } else {
+                selectedPOIs.splice(index, 1);
+                liElement.classList.remove("selected");
+                markers[id].setIcon(getIcon("blue"));
+            }
+        }
+
+        // 4. Vẽ Marker trạng thái chờ (Màu xanh)
+        function drawStandbyMarkers() {
+            allPOIs.forEach(poi => {
+                const [lng, lat] = poi.location.coordinates;
+                const marker = L.marker([lat, lng], { icon: getIcon('blue') }).addTo(map)
+                    .bindPopup(`<b>${poi.placeName}</b><br>${poi.province}`);
+                markers[poi._id] = marker;
+            });
+        }
+
+        // 5. Gọi AI Tính Lộ trình Tối ưu
+        async function runAI() {
+            if (selectedPOIs.length < 3) {
+                alert("Vui lòng chọn ít nhất 3 địa điểm để tính lộ trình TSP!");
+                return;
+            }
+
+            document.getElementById("loading").style.display = "block";
+            document.getElementById("results").innerHTML = "";
+
+            // Xóa đường vẽ cũ
+            polylines.forEach(p => map.removeLayer(p));
+            polylines = [];
+
+            try {
+                const startPoi = selectedPOIs[0];
+                const others = selectedPOIs.slice(1);
+
+                const response = await axios.post(`${AI_API_URL}/optimize-route`, {
+                    start_poi_id: startPoi,
+                    pois_to_visit: others,
+                    end_poi_id: null // Tạo vòng cung tròn đi về điểm xuất phát
+                });
+
+                const data = response.data;
+                document.getElementById("loading").style.display = "none";
+
+                // Hiển thị kết quả Text
+                let html = `
+                    <div class="result-box">
+                        <strong style="color:red">📊 BÁO CÁO HEURISTIC:</strong><br>
+                        Tổng khoảng cách: ${data.total_distance_km} km<br>
+                        Tổng Thời gian dự kiến (có kẹt xe): ${data.total_estimated_time_minutes} phút
+                    </div>
+                    <b>Các chặng đi chi tiết:</b><br><br>
+                `;
+
+                // Trích xuất Toạ độ để vẽ đường (Polyline)
+                const latlngs = [];
+                const routeOrder = data.optimized_route_ids;
+
+                routeOrder.forEach((poiId, index) => {
+                    const poiData = allPOIs.find(p => p._id === poiId);
+                    if (poiData) {
+                        const [lng, lat] = poiData.location.coordinates;
+                        latlngs.push([lat, lng]);
+                    }
+                });
+
+                // Vẽ đường nối các điểm
+                const polyline = L.polyline(latlngs, { color: '#d63031', weight: 4, dashArray: '5, 10' }).addTo(map);
+                polylines.push(polyline);
+                map.fitBounds(polyline.getBounds()); // Zoom vừa màn hình
+
+                // Render detail text
+                data.path_details.forEach((step, idx) => {
+                    html += `
+                        <div style="font-size: 0.85rem; border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 5px;">
+                            ${idx + 1}. <b>${step.from}</b> ➔ <b>${step.to}</b><br>
+                            📏 ${step.distance_km} km | ⏱ ${step.base_time_minutes} phút (gốc)<br>
+                            ⚠️ <b>Thời gian thực tế (A*): ${step.computed_time_minutes} phút</b>
+                        </div>
+                    `;
+                });
+
+                document.getElementById("results").innerHTML = html;
+
+            } catch (error) {
+                document.getElementById("loading").style.display = "none";
+                alert("Lỗi tính toán TSP, do có điểm chưa được nạp lên Ma trận kẹt xe (Khoảng cách quá xa). " + error);
+            }
+        }
+
+        function clearMap() {
+            selectedPOIs = [];
+            document.querySelectorAll(".selected").forEach(el => el.classList.remove("selected"));
+            for (let key in markers) { markers[key].setIcon(getIcon("blue")); }
+            polylines.forEach(p => map.removeLayer(p));
+            document.getElementById("results").innerHTML = "";
+            map.setView([16.0544, 108.2022], 6);
+        }
+
+        // Helper: Sinh Icon Marker
+        function getIcon(color) {
+            return new L.Icon({
+                iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+            });
+        }
+
+        window.onload = () => {
+            initMap();
+            loadPOIs();
+        };
+    </script>
+</body>
+
+</html>

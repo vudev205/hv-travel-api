@@ -35,3 +35,4 @@ coverage/
 # Build files
 dist/
 build/
+ai_service/venv/

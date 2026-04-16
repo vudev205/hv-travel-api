@@ -27,6 +27,7 @@ const chatConversationSchema = new Schema(
     status: {
       type: String,
       default: "waitingStaff",
+      enum: ["waitingStaff", "open", "pending", "resolved", "closed"],
       trim: true,
     },
     participantType: {
@@ -37,7 +38,6 @@ const chatConversationSchema = new Schema(
     customerId: {
       type: Schema.Types.Mixed,
       default: null,
-      index: true,
     },
     visitorSessionId: {
       type: String,
@@ -82,6 +82,17 @@ const chatConversationSchema = new Schema(
 );
 
 chatConversationSchema.index({ customerId: 1, lastMessageAt: -1 });
+chatConversationSchema.index(
+  { customerId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ["waitingStaff", "open", "pending"] },
+    },
+  }
+);
+chatConversationSchema.index({ status: 1, unreadForAdminCount: -1, lastMessageAt: -1 });
+chatConversationSchema.index({ assignedStaffUserId: 1, status: 1, lastMessageAt: -1 });
 
 const ChatConversation =
   mongoose.models.ChatConversation ||
