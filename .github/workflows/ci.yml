@@ -1,0 +1,26 @@
+name: Node.js CI Pipeline
+
+# 1. KHI NÀO THÌ CHẠY?
+on:
+  push:
+    branches: [ "main" ] # Cứ push code lên nhánh main là kích hoạt
+
+# 2. CHẠY NHỮNG VIỆC GÌ?
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest # Thuê một cái máy ảo Linux miễn phí của GitHub
+
+    steps: # Các bước máy ảo sẽ làm
+    - name: Lấy mã nguồn về máy ảo
+      uses: actions/checkout@v3
+
+    - name: Cài đặt môi trường Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x' # Dùng bản Node.js 18
+
+    - name: Cài đặt các thư viện (npm install)
+      run: npm ci
+
+    - name: Chạy Test kiểm tra lỗi
+      run: npm test

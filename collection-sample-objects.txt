@@ -1,0 +1,268 @@
+Collection: Bookings
+{
+  "_id": "67f8a2b1c3d4e5f607182930",
+  "booking_code": "BK20260411001",
+  "tour_id": "67f8a2b1c3d4e5f607182901",
+  "tour_snapshot": {
+    "code": "TOUR-HA-NOI-001",
+    "name": "Ha Noi City Tour",
+    "start_date": "2026-05-01T00:00:00.000Z",
+    "duration": "3D2N"
+  },
+  "customer_id": "67f8a2b1c3d4e5f607182902",
+  "booking_date": "2026-04-11T08:30:00.000Z",
+  "total_amount": "12500000.00",
+  "status": "Pending",
+  "payment_status": "Unpaid",
+  "participants_count": 2,
+  "passengers": [
+    {
+      "full_name": "Nguyen Van A",
+      "birth_date": "1995-06-10T00:00:00.000Z",
+      "type": "Adult",
+      "gender": "male",
+      "passport_number": "B1234567"
+    }
+  ],
+  "contact_info": {
+    "name": "Nguyen Van A",
+    "email": "vana@example.com",
+    "phone": "0901234567"
+  },
+  "notes": "Window seat if possible",
+  "history_log": [
+    {
+      "action": "created",
+      "timestamp": "2026-04-11T08:30:00.000Z",
+      "user": "system",
+      "note": "Initial booking"
+    }
+  ],
+  "created_at": "2026-04-11T08:30:00.000Z",
+  "updated_at": "2026-04-11T08:30:00.000Z",
+  "is_deleted": false,
+  "deleted_by": null,
+  "deleted_at": null
+}
+
+Collection: chatConversations
+{
+  "_id": "67f8a2b1c3d4e5f607182931",
+  "conversationCode": "CONV-20260411-0001",
+  "channel": "web",
+  "status": "waitingStaff",
+  "participantType": "customer",
+  "customerId": "67f8a2b1c3d4e5f607182902",
+  "visitorSessionId": "sess_abc123",
+  "guestProfile": {
+    "displayName": "Guest User",
+    "email": "guest@example.com",
+    "phoneNumber": "0987654321"
+  },
+  "assignedStaffUserId": "",
+  "sourcePage": "/support",
+  "lastMessagePreview": "I need help with my booking",
+  "lastMessageAt": "2026-04-11T09:00:00.000Z",
+  "unreadForAdminCount": 1,
+  "unreadForCustomerCount": 0,
+  "createdAt": "2026-04-11T09:00:00.000Z",
+  "updatedAt": "2026-04-11T09:00:00.000Z"
+}
+
+Collection: chatMessages
+{
+  "_id": "67f8a2b1c3d4e5f607182932",
+  "conversationId": "67f8a2b1c3d4e5f607182931",
+  "senderType": "customer",
+  "senderUserId": "67f8a2b1c3d4e5f607182902",
+  "senderDisplayName": "Nguyen Van A",
+  "clientMessageId": "msg-client-001",
+  "messageType": "text",
+  "content": "Please confirm my payment status",
+  "isRead": false,
+  "readAt": null,
+  "sentAt": "2026-04-11T09:01:00.000Z",
+  "createdAt": "2026-04-11T09:01:00.000Z",
+  "updatedAt": "2026-04-11T09:01:00.000Z"
+}
+
+Collection: Customers
+{
+  "_id": "67f8a2b1c3d4e5f607182902",
+  "customerCode": "CUS000001",
+  "fullName": "Nguyen Van A",
+  "email": "vana@example.com",
+  "password": "$2b$10$examplehashedpassword",
+  "phoneNumber": "0901234567",
+  "avatarUrl": null,
+  "address": {
+    "street": "123 Main St",
+    "city": "Ha Noi",
+    "country": "Viet Nam"
+  },
+  "segment": "New",
+  "status": "Active",
+  "stats": {
+    "loyaltyPoints": 100,
+    "lastActivity": "2026-04-11T08:00:00.000Z"
+  },
+  "emailVerified": true,
+  "tokenVersion": 0,
+  "refreshSessions": [
+    {
+      "tokenId": "rtok_001",
+      "deviceId": "iphone-14",
+      "refreshTokenHash": "sha256_hash_value",
+      "expiresAt": "2026-05-11T08:00:00.000Z",
+      "createdAt": "2026-04-11T08:00:00.000Z",
+      "lastUsedAt": "2026-04-11T08:30:00.000Z",
+      "revokedAt": null,
+      "replacedByTokenId": null,
+      "deviceLabel": "iPhone"
+    }
+  ],
+  "createdAt": "2026-04-01T08:00:00.000Z",
+  "updatedAt": "2026-04-11T08:30:00.000Z"
+}
+
+Collection: Favourites
+{
+  "_id": "67f8a2b1c3d4e5f607182933",
+  "customerId": "67f8a2b1c3d4e5f607182902",
+  "tourId": "67f8a2b1c3d4e5f607182901",
+  "createdAt": "2026-04-11T09:10:00.000Z",
+  "updatedAt": "2026-04-11T09:10:00.000Z"
+}
+
+Collection: Notifications
+{
+  "_id": "67f8a2b1c3d4e5f607182934",
+  "customerId": "67f8a2b1c3d4e5f607182902",
+  "title": "Booking Confirmed",
+  "message": "Your booking BK20260411001 has been confirmed",
+  "type": "Booking",
+  "isRead": false,
+  "createdAt": "2026-04-11T09:15:00.000Z",
+  "updatedAt": "2026-04-11T09:15:00.000Z"
+}
+
+Collection: otp_verifications
+{
+  "_id": "67f8a2b1c3d4e5f607182935",
+  "email": "vana@example.com",
+  "otp": "123456",
+  "type": "register",
+  "expiresAt": "2026-04-11T09:20:00.000Z",
+  "isUsed": false,
+  "attempts": 0,
+  "createdAt": "2026-04-11T09:15:00.000Z"
+}
+
+Collection: Payments
+{
+  "_id": "67f8a2b1c3d4e5f607182936",
+  "bookingId": "67f8a2b1c3d4e5f607182930",
+  "amount": 12500000,
+  "transactionId": "TXN-20260411-0001",
+  "paymentMethod": "BankTransfer",
+  "status": "Pending",
+  "paymentDate": "2026-04-11T09:25:00.000Z",
+  "createdAt": "2026-04-11T09:25:00.000Z",
+  "updatedAt": "2026-04-11T09:25:00.000Z"
+}
+
+Collection: Promotions
+{
+  "_id": "67f8a2b1c3d4e5f607182937",
+  "code": "SUMMER2026",
+  "description": "Summer promotion",
+  "discountPercent": 15,
+  "maxUses": 100,
+  "usedCount": 5,
+  "validFrom": "2026-04-01T00:00:00.000Z",
+  "validTo": "2026-06-30T23:59:59.000Z",
+  "isActive": true,
+  "createdAt": "2026-04-01T00:00:00.000Z",
+  "updatedAt": "2026-04-11T00:00:00.000Z"
+}
+
+Collection: Reviews
+{
+  "_id": "67f8a2b1c3d4e5f607182938",
+  "tourId": "67f8a2b1c3d4e5f607182901",
+  "customerId": "67f8a2b1c3d4e5f607182902",
+  "rating": 4.5,
+  "comment": "Great experience and friendly guide",
+  "isApproved": true,
+  "createdAt": "2026-04-11T09:30:00.000Z",
+  "updatedAt": "2026-04-11T09:30:00.000Z"
+}
+
+Collection: Tours
+{
+  "_id": "67f8a2b1c3d4e5f607182901",
+  "name": "Ha Noi - Ha Long 3D2N",
+  "category": "Domestic",
+  "destination": {
+    "city": "Ha Noi",
+    "country": "Viet Nam",
+    "region": "North"
+  },
+  "description": "City and bay discovery tour",
+  "images": [
+    "https://example.com/tours/ha-noi-1.jpg",
+    "https://example.com/tours/ha-long-1.jpg"
+  ],
+  "duration": {
+    "days": 3,
+    "nights": 2,
+    "text": "3 days 2 nights"
+  },
+  "price": {
+    "adult": 6500000,
+    "child": 4500000,
+    "infant": 1000000,
+    "discount": 10
+  },
+  "schedule": [
+    {
+      "day": 1,
+      "title": "Arrival in Ha Noi",
+      "description": "Visit Old Quarter",
+      "activities": ["Check-in", "City walk"]
+    }
+  ],
+  "max_participants": 30,
+  "current_participants": 12,
+  "inclusions": ["Hotel", "Breakfast", "Transport"],
+  "exclusions": ["Personal expenses"],
+  "review_count": 18,
+  "rating": 4.6,
+  "start_dates": [
+    "2026-05-01T00:00:00.000Z",
+    "2026-05-15T00:00:00.000Z"
+  ],
+  "status": "Active",
+  "is_deleted": false,
+  "created_at": "2026-03-01T00:00:00.000Z",
+  "updated_at": "2026-04-11T00:00:00.000Z"
+}
+
+Collection: Users
+{
+  "_id": "67f8a2b1c3d4e5f607182939",
+  "fullName": "Tran Thi B",
+  "email": "thib@example.com",
+  "password": "$2b$10$examplehashedpassword",
+  "phone": "0911222333",
+  "gender": "female",
+  "birthday": "1998-09-15T00:00:00.000Z",
+  "address": "Ho Chi Minh City",
+  "avatar": null,
+  "role": "admin",
+  "emailVerified": true,
+  "phoneVerified": false,
+  "tokenVersion": 0,
+  "createdAt": "2026-04-01T10:00:00.000Z",
+  "updatedAt": "2026-04-11T10:00:00.000Z"
+}

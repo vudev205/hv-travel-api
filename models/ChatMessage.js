@@ -25,6 +25,11 @@ const chatMessageSchema = new Schema(
       default: "",
       trim: true,
     },
+    clientMessageId: {
+      type: String,
+      default: undefined,
+      trim: true,
+    },
     messageType: {
       type: String,
       default: "text",
@@ -54,6 +59,10 @@ const chatMessageSchema = new Schema(
 );
 
 chatMessageSchema.index({ conversationId: 1, sentAt: 1 });
+chatMessageSchema.index(
+  { conversationId: 1, clientMessageId: 1 },
+  { unique: true, sparse: true }
+);
 
 const ChatMessage =
   mongoose.models.ChatMessage || mongoose.model("ChatMessage", chatMessageSchema);
