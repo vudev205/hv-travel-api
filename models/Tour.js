@@ -65,6 +65,12 @@ const TourSchema = new Schema(
     // Replaces itinerary
     schedule: { type: [ScheduleSchema], default: [] },
 
+    // Recommendation metadata for content-based filtering
+    tags: { type: [String], default: [] },
+    themes: { type: [String], default: [] },
+    travel_style: { type: String, default: "", trim: true },
+    budget_level: { type: String, default: "", trim: true },
+
     // Replaces stock
     max_participants: { type: Number, default: 0 },
     current_participants: { type: Number, default: 0 },
@@ -94,6 +100,8 @@ const TourSchema = new Schema(
 // Indexes
 TourSchema.index({ "destination.city": 1 });
 TourSchema.index({ category: 1 });
+TourSchema.index({ tags: 1 });
+TourSchema.index({ themes: 1 });
 TourSchema.index({ status: 1, deleted: 1 });
 
 export default mongoose.models.Tour || mongoose.model("Tour", TourSchema);

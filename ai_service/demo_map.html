@@ -111,9 +111,49 @@
 
         .loading {
             display: none;
-            margin-top: 10px;
-            color: #ff9800;
+            margin-top: 15px;
+            padding: 15px;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            border-radius: 8px;
+            color: #fff;
+            text-align: center;
+        }
+
+        .loading .spinner {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            border: 3px solid rgba(255,255,255,0.2);
+            border-top-color: #00d2ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading .loading-text {
+            font-size: 0.85rem;
             font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .loading .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .loading .progress-bar .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+            border-radius: 2px;
+            transition: width 0.5s ease;
         }
     </style>
 </head>
@@ -130,9 +170,27 @@
             <li>Đang tải dữ liệu...</li>
         </ul>
 
+        <div style="margin-bottom: 12px;">
+            <label style="font-weight: bold; font-size: 0.9rem; display: block; margin-bottom: 4px;">🚗 Phương tiện di chuyển:</label>
+            <select id="vehicleSelect" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 0.9rem;">
+                <option value="driving-car">🚗 Ô tô</option>
+                <option value="driving-car" data-label="motorcycle">🏍️ Xe máy</option>
+                <option value="cycling-regular">🚲 Xe đạp</option>
+                <option value="foot-walking">🚶 Đi bộ</option>
+                <option value="driving-hgv">🚛 Xe tải nặng</option>
+            </select>
+            <p style="font-size: 0.75rem; color: #999; margin: 4px 0 0 0;">* Xe máy dùng chung tuyến đường ô tô (ORS chưa hỗ trợ riêng)</p>
+        </div>
+
         <button class="btn-run" onclick="runAI()">🚀 Chạy Thuật Toán TSP</button>
+        <button id="btnCompare" style="display:block; width:100%; padding:10px; background:#ff6b35; color:white; border:none; border-radius:5px; margin-top:8px; cursor:pointer; font-weight:bold;" onclick="compareRoutes()">⚡ So sánh AI vs Thứ tự gốc</button>
+        <button style="display:block; width:100%; padding:10px; background:#6c5ce7; color:white; border:none; border-radius:5px; margin-top:8px; cursor:pointer; font-weight:bold; font-size: 0.85rem;" onclick="runNightmareTest()">🎢 Test Nhanh (Nhảy cóc Bắc-Nam)</button>
         <button class="btn-clear" onclick="clearMap()">🗑 Xóa Bản Đồ</button>
-        <div id="loading" class="loading">⏳ AI Đang tính toán ma trận...</div>
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <div class="loading-text">⏳ AI Đang tính toán...</div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 0%"></div></div>
+        </div>
 
         <div id="results"></div>
     </div>
@@ -146,6 +204,122 @@
     <script>
         // Cấu hình AI API
         const AI_API_URL = "http://localhost:8000/api";
+        const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImIyMTE1NDI1OGExOTRjZTM5YmRlZjEzZmUxNTliNDZiIiwiaCI6Im11cm11cjY0In0=";
+
+        // Màu sắc cho từng chặng đường
+        const ROUTE_COLORS = ['#e74c3c', '#2ecc71', '#3498db', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#e91e63'];
+
+        // ====== LOADING HELPERS ======
+        function showLoading(text, progress = 0) {
+            const el = document.getElementById("loading");
+            el.style.display = "block";
+            el.querySelector(".loading-text").textContent = text;
+            document.getElementById("progressFill").style.width = progress + "%";
+            setButtons(true); // Disable tất cả nút
+        }
+
+        function updateLoading(text, progress) {
+            document.getElementById("loading").querySelector(".loading-text").textContent = text;
+            document.getElementById("progressFill").style.width = progress + "%";
+        }
+
+        function hideLoading() {
+            document.getElementById("loading").style.display = "none";
+            document.getElementById("progressFill").style.width = "0%";
+            setButtons(false); // Enable lại nút
+        }
+
+        function setButtons(disabled) {
+            document.querySelectorAll(".btn-run, .btn-clear, #btnCompare").forEach(btn => {
+                btn.disabled = disabled;
+                btn.style.opacity = disabled ? "0.5" : "1";
+                btn.style.pointerEvents = disabled ? "none" : "auto";
+            });
+        }
+
+        // Gọi ORS Directions API để lấy hình dạng đường đi thực tế
+        function getSelectedProfile() {
+            return document.getElementById('vehicleSelect').value;
+        }
+        function getSelectedLabel() {
+            const sel = document.getElementById('vehicleSelect');
+            return sel.options[sel.selectedIndex].text;
+        }
+
+        // Tính khoảng cách đường chim bay (mét) giữa 2 tọa độ [lng, lat]
+        function haversineDistance(coords1, coords2) {
+            const R = 6371e3;
+            const φ1 = coords1[1] * Math.PI / 180;
+            const φ2 = coords2[1] * Math.PI / 180;
+            const Δφ = (coords2[1] - coords1[1]) * Math.PI / 180;
+            const Δλ = (coords2[0] - coords1[0]) * Math.PI / 180;
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function getRoutableWaypoint(coords) {
+            const lng = coords[0], lat = coords[1];
+            // Sapa (Fansipan & Cat Cat) -> Sapa Center
+            if (lng >= 103.7 && lng <= 103.85 && lat >= 22.3 && lat <= 22.35) return [103.843, 22.336];
+            // Đèo Mã Pí Lèng -> Đồng Văn
+            if (lng >= 105.35 && lng <= 105.45 && lat >= 23.2 && lat <= 23.3) return [105.362, 23.279];
+            // Bà Nà Hills, Cầu Vàng -> Trung tâm Đà Nẵng
+            if (lng >= 107.95 && lng <= 108.05 && lat >= 15.95 && lat <= 16.05) return [108.2022, 16.0544];
+            // Thánh địa Mỹ Sơn -> Hội An
+            if (lng >= 108.10 && lng <= 108.15 && lat >= 15.75 && lat <= 15.80) return [108.338, 15.8794];
+            // Tràng An, Chùa Bái Đính -> Trung tâm Ninh Bình
+            if (lng >= 105.8 && lng <= 106.0 && lat >= 20.2 && lat <= 20.3) return [105.975, 20.25];
+            return coords;
+        }
+
+        async function getRouteGeometry(startCoords, endCoords) {
+            const profile = getSelectedProfile();
+            const routableStart = getRoutableWaypoint(startCoords);
+            const routableEnd = getRoutableWaypoint(endCoords);
+
+            // Đi trong cùng một khu vực không có đường lộ
+            if (routableStart[0] === routableEnd[0] && routableStart[1] === routableEnd[1]) {
+                return null; 
+            }
+
+            const url = `https://api.openrouteservice.org/v2/directions/${profile}/geojson`;
+            try {
+                const res = await axios.post(url, {
+                    coordinates: [routableStart, routableEnd], // [lng, lat] format
+                    options: {
+                        avoid_borders: "all"
+                    }
+                }, {
+                    headers: {
+                        "Authorization": ORS_API_KEY,
+                        "Content-Type": "application/json"
+                    }
+                });
+                const feature = res.data.features[0];
+                let coords = feature.geometry.coordinates; // mảng các [lng, lat]
+                
+                // Nối bù đoạn chim bay nếu POI nằm ngoài rìa đường lộ
+                if (routableStart !== startCoords) {
+                    coords.unshift(startCoords);
+                }
+                if (routableEnd !== endCoords) {
+                    coords.push(endCoords);
+                }
+
+                const summary = feature.properties.summary;
+                return {
+                    path: coords.map(c => [c[1], c[0]]), // Leaflet dùng [lat, lng]
+                    distance_km: Math.round(summary.distance / 1000 * 100) / 100,
+                    duration_min: Math.round(summary.duration / 60 * 10) / 10
+                };
+            } catch (err) {
+                console.warn("ORS Directions API lỗi, dùng đường chim bay:", err.message);
+                return null;
+            }
+        }
 
         let map;
         let allPOIs = [];
@@ -178,9 +352,10 @@
             const container = document.getElementById("poiContainer");
             container.innerHTML = "";
             allPOIs.forEach(poi => {
+                const province = poi.province || (poi.address && poi.address.includes(',') ? poi.address.split(',').pop().trim() : poi.address) || "Việt Nam";
                 const li = document.createElement("li");
                 li.className = "poi-item";
-                li.innerHTML = `<strong>${poi.placeName}</strong> <span style="font-size:0.8rem; color:#888;">(${poi.province})</span>`;
+                li.innerHTML = `<strong>${poi.placeName}</strong> <span style="font-size:0.8rem; color:#888;">(${province})</span>`;
                 li.onclick = () => toggleSelectPOI(poi._id, li);
                 container.appendChild(li);
             });
@@ -203,8 +378,9 @@
         function drawStandbyMarkers() {
             allPOIs.forEach(poi => {
                 const [lng, lat] = poi.location.coordinates;
+                const province = poi.province || (poi.address && poi.address.includes(',') ? poi.address.split(',').pop().trim() : poi.address) || "Việt Nam";
                 const marker = L.marker([lat, lng], { icon: getIcon('blue') }).addTo(map)
-                    .bindPopup(`<b>${poi.placeName}</b><br>${poi.province}`);
+                    .bindPopup(`<b>${poi.placeName}</b><br>${province}`);
                 markers[poi._id] = marker;
             });
         }
@@ -216,7 +392,7 @@
                 return;
             }
 
-            document.getElementById("loading").style.display = "block";
+            showLoading("🧠 AI đang phân tích ma trận khoảng cách...", 5);
             document.getElementById("results").innerHTML = "";
 
             // Xóa đường vẽ cũ
@@ -230,46 +406,144 @@
                 const response = await axios.post(`${AI_API_URL}/optimize-route`, {
                     start_poi_id: startPoi,
                     pois_to_visit: others,
-                    end_poi_id: null // Tạo vòng cung tròn đi về điểm xuất phát
+                    end_poi_id: null,
+                    vehicle_profile: getSelectedProfile()
                 });
 
                 const data = response.data;
-                document.getElementById("loading").style.display = "none";
+                updateLoading("🗺️ Đang vẽ tuyến đường thực tế...", 30);
+
+                const vehicleLabel = getSelectedLabel();
 
                 // Hiển thị kết quả Text
                 let html = `
                     <div class="result-box">
                         <strong style="color:red">📊 BÁO CÁO HEURISTIC:</strong><br>
+                        Phương tiện: <b>${vehicleLabel}</b><br>
                         Tổng khoảng cách: ${data.total_distance_km} km<br>
                         Tổng Thời gian dự kiến (có kẹt xe): ${data.total_estimated_time_minutes} phút
                     </div>
                     <b>Các chặng đi chi tiết:</b><br><br>
                 `;
 
-                // Trích xuất Toạ độ để vẽ đường (Polyline)
-                const latlngs = [];
+                // ====== VẼ ĐƯỜNG ĐI THỰC TẾ BẰNG ORS DIRECTIONS API ======
                 const routeOrder = data.optimized_route_ids;
+                const allBounds = [];
+                const segmentData = []; // Lưu số liệu thực tế từng chặng
 
-                routeOrder.forEach((poiId, index) => {
-                    const poiData = allPOIs.find(p => p._id === poiId);
-                    if (poiData) {
-                        const [lng, lat] = poiData.location.coordinates;
-                        latlngs.push([lat, lng]);
+                // Loading đã được hiển thị ở trên
+
+                for (let i = 0; i < routeOrder.length - 1; i++) {
+                    const fromPoi = allPOIs.find(p => p._id === routeOrder[i]);
+                    const toPoi = allPOIs.find(p => p._id === routeOrder[i + 1]);
+
+                    if (!fromPoi || !toPoi) continue;
+
+                    const fromCoords = fromPoi.location.coordinates;
+                    const toCoords = toPoi.location.coordinates;
+                    const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
+
+                    const totalSteps = routeOrder.length - 1;
+                    const pct = 30 + Math.round((i / totalSteps) * 60);
+                    updateLoading(`🗺️ Đang vẽ chặng ${i + 1}/${totalSteps}...`, pct);
+
+                    // Gọi ORS API lấy đường đi thực tế
+                    const orsResult = await getRouteGeometry(fromCoords, toCoords);
+
+                    // Delay 1.5s giữa mỗi request (ORS rate limit)
+                    if (i < routeOrder.length - 2) {
+                        await new Promise(r => setTimeout(r, 1500));
                     }
+
+                    let segmentLine;
+                    if (orsResult) {
+                        segmentLine = L.polyline(orsResult.path, {
+                            color: color, weight: 5, opacity: 0.85
+                        }).addTo(map);
+                        segmentData.push({
+                            real_distance_km: orsResult.distance_km,
+                            real_duration_min: orsResult.duration_min
+                        });
+                    } else {
+                        // FALLBACK: Đường chim bay
+                        const dist = haversineDistance(fromCoords, toCoords);
+                        const dur = (dist / 1000) / 30 * 60; // 30km/h
+                        const fallbackPath = [
+                            [fromCoords[1], fromCoords[0]],
+                            [toCoords[1], toCoords[0]]
+                        ];
+                        segmentLine = L.polyline(fallbackPath, {
+                            color: color, weight: 4, dashArray: '8, 12', opacity: 0.7
+                        }).addTo(map);
+                        segmentData.push({
+                            real_distance_km: Math.round(dist / 1000 * 100) / 100,
+                            real_duration_min: Math.round(dur * 10) / 10,
+                            is_fallback: true
+                        });
+                    }
+
+                    // Nhãn số thứ tự giữa đoạn đường
+                    const pathCoords = orsResult ? orsResult.path : [[fromCoords[1], fromCoords[0]], [toCoords[1], toCoords[0]]];
+                    const midIdx = Math.floor(pathCoords.length / 2);
+                    const midPoint = pathCoords[midIdx];
+                    const stepLabel = L.marker(midPoint, {
+                        icon: L.divIcon({
+                            className: '',
+                            html: `<div style="background:${color}; color:white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.4);">${i + 1}</div>`,
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        })
+                    }).addTo(map);
+
+                    polylines.push(segmentLine);
+                    polylines.push(stepLabel);
+                    allBounds.push(segmentLine.getBounds());
+                }
+
+                // Zoom vừa toàn bộ lộ trình
+                if (allBounds.length > 0) {
+                    let totalBounds = allBounds[0];
+                    for (let i = 1; i < allBounds.length; i++) {
+                        totalBounds.extend(allBounds[i]);
+                    }
+                    map.fitBounds(totalBounds, { padding: [30, 30] });
+                }
+
+                hideLoading();
+
+                // Tính tổng số liệu thực tế theo phương tiện
+                let totalRealDist = 0, totalRealTime = 0;
+                segmentData.forEach(s => {
+                    if (s) { totalRealDist += s.real_distance_km; totalRealTime += s.real_duration_min; }
                 });
 
-                // Vẽ đường nối các điểm
-                const polyline = L.polyline(latlngs, { color: '#d63031', weight: 4, dashArray: '5, 10' }).addTo(map);
-                polylines.push(polyline);
-                map.fitBounds(polyline.getBounds()); // Zoom vừa màn hình
+                // Cập nhật báo cáo với số liệu phương tiện thực tế
+                html = `
+                    <div class="result-box">
+                        <strong style="color:red">📊 BÁO CÁO HEURISTIC:</strong><br>
+                        Phương tiện: <b>${vehicleLabel}</b><br><br>
+                        <b>Theo thuật toán AI (Heuristic A*):</b><br>
+                        📏 Tổng khoảng cách: ${data.total_distance_km} km<br>
+                        ⏱ Tổng thời gian (có kẹt xe): ${data.total_estimated_time_minutes} phút<br><br>
+                        <b>Theo ${vehicleLabel} thực tế (ORS):</b><br>
+                        📏 Tổng khoảng cách: ${Math.round(totalRealDist * 100) / 100} km<br>
+                        ⏱ Tổng thời gian: ${Math.round(totalRealTime * 10) / 10} phút
+                    </div>
+                    <b>Các chặng đi chi tiết:</b><br><br>
+                `;
 
                 // Render detail text
                 data.path_details.forEach((step, idx) => {
+                    const color = ROUTE_COLORS[idx % ROUTE_COLORS.length];
+                    const seg = segmentData[idx];
+                    const realInfo = seg
+                        ? `${vehicleLabel}: 📏 ${seg.real_distance_km} km | ⏱ ${seg.real_duration_min} phút`
+                        : `${vehicleLabel}: Không có dữ liệu đường đi`;
                     html += `
-                        <div style="font-size: 0.85rem; border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 5px;">
-                            ${idx + 1}. <b>${step.from}</b> ➔ <b>${step.to}</b><br>
-                            📏 ${step.distance_km} km | ⏱ ${step.base_time_minutes} phút (gốc)<br>
-                            ⚠️ <b>Thời gian thực tế (A*): ${step.computed_time_minutes} phút</b>
+                        <div style="font-size: 0.85rem; border-left: 4px solid ${color}; padding-left: 8px; padding-bottom: 5px; margin-bottom: 8px;">
+                            <strong>${idx + 1}. ${step.from} ➔ ${step.to}</strong><br>
+                            <span style="color:#666">🤖 AI: ${step.distance_km} km | ${step.base_time_minutes}p (gốc) → <b>${step.computed_time_minutes}p (A*)</b></span><br>
+                            <span style="color:#0d6efd">${realInfo}</span>
                         </div>
                     `;
                 });
@@ -277,8 +551,167 @@
                 document.getElementById("results").innerHTML = html;
 
             } catch (error) {
-                document.getElementById("loading").style.display = "none";
-                alert("Lỗi tính toán TSP, do có điểm chưa được nạp lên Ma trận kẹt xe (Khoảng cách quá xa). " + error);
+                hideLoading();
+                alert("Lỗi tính toán TSP: " + error);
+            }
+        }
+
+        // ====== SO SÁNH AI vs THỨ TỰ GỐC ======
+        async function compareRoutes() {
+            if (selectedPOIs.length < 3) {
+                alert("Vui lòng chọn ít nhất 3 địa điểm!");
+                return;
+            }
+
+            // Xóa đường cũ
+            polylines.forEach(p => map.removeLayer(p));
+            polylines = [];
+
+            showLoading("⚡ Đang gọi AI tính lộ trình tối ưu...", 5);
+
+            const startPoi = selectedPOIs[0];
+            const others = selectedPOIs.slice(1);
+
+            try {
+                // 1. Gọi API lấy lộ trình AI tối ưu
+                const aiResponse = await axios.post(`${AI_API_URL}/optimize-route`, {
+                    start_poi_id: startPoi,
+                    pois_to_visit: others,
+                    end_poi_id: null,
+                    vehicle_profile: getSelectedProfile()
+                });
+                const aiData = aiResponse.data;
+
+                // 2. Tính lộ trình theo THỨ TỰ GỐC (thứ tự user click)
+                const naiveOrder = [...selectedPOIs, selectedPOIs[0]]; // Vòng khép kín
+                let naiveTotalDist = 0, naiveTotalTime = 0;
+                const naiveSegments = [];
+
+                for (let i = 0; i < naiveOrder.length - 1; i++) {
+                    const fromPoi = allPOIs.find(p => p._id === naiveOrder[i]);
+                    const toPoi = allPOIs.find(p => p._id === naiveOrder[i + 1]);
+                    if (!fromPoi || !toPoi) continue;
+
+                    const naiveTotal = naiveOrder.length - 1;
+                    const pct = 15 + Math.round((i / naiveTotal) * 35);
+                    updateLoading(`🔴 Vẽ lộ trình gốc: chặng ${i + 1}/${naiveTotal}...`, pct);
+
+                    const orsResult = await getRouteGeometry(fromPoi.location.coordinates, toPoi.location.coordinates);
+                    if (i < naiveOrder.length - 2) await new Promise(r => setTimeout(r, 1500));
+
+                    if (orsResult) {
+                        naiveTotalDist += orsResult.distance_km;
+                        naiveTotalTime += orsResult.duration_min;
+                        naiveSegments.push(orsResult);
+                    } else {
+                        const dist = haversineDistance(fromPoi.location.coordinates, toPoi.location.coordinates);
+                        const dur = (dist / 1000) / 30 * 60;
+                        naiveTotalDist += dist / 1000;
+                        naiveTotalTime += dur;
+                        naiveSegments.push({
+                            path: [[fromPoi.location.coordinates[1], fromPoi.location.coordinates[0]], [toPoi.location.coordinates[1], toPoi.location.coordinates[0]]],
+                            is_fallback: true
+                        });
+                    }
+                }
+
+                updateLoading("🟢 Đang vẽ lộ trình AI tối ưu...", 55);
+
+                // 3. Vẽ lộ trình GỐC (màu đỏ mờ, nét đứt)
+                for (const seg of naiveSegments) {
+                    const line = L.polyline(seg.path, {
+                        color: '#e74c3c', weight: 4, opacity: 0.4, dashArray: '10, 8'
+                    }).addTo(map);
+                    polylines.push(line);
+                }
+
+                // 4. Vẽ lộ trình AI (màu xanh lá, nét liền đậm)
+                const aiOrder = aiData.optimized_route_ids;
+                const aiSegments = [];
+                for (let i = 0; i < aiOrder.length - 1; i++) {
+                    const fromPoi = allPOIs.find(p => p._id === aiOrder[i]);
+                    const toPoi = allPOIs.find(p => p._id === aiOrder[i + 1]);
+                    if (!fromPoi || !toPoi) continue;
+
+                    const aiTotal = aiOrder.length - 1;
+                    const pct = 55 + Math.round((i / aiTotal) * 35);
+                    updateLoading(`🟢 Vẽ lộ trình AI: chặng ${i + 1}/${aiTotal}...`, pct);
+
+                    const orsResult = await getRouteGeometry(fromPoi.location.coordinates, toPoi.location.coordinates);
+                    if (i < aiOrder.length - 2) await new Promise(r => setTimeout(r, 1500));
+
+                    if (orsResult) {
+                        aiSegments.push(orsResult);
+                        const line = L.polyline(orsResult.path, {
+                            color: '#2ecc71', weight: 5, opacity: 0.9
+                        }).addTo(map);
+                        polylines.push(line);
+                    } else {
+                        const dist = haversineDistance(fromPoi.location.coordinates, toPoi.location.coordinates);
+                        const dur = (dist / 1000) / 30 * 60;
+                        aiSegments.push({
+                            distance_km: dist / 1000,
+                            duration_min: dur,
+                            is_fallback: true
+                        });
+                        const line = L.polyline([[fromPoi.location.coordinates[1], fromPoi.location.coordinates[0]], [toPoi.location.coordinates[1], toPoi.location.coordinates[0]]], {
+                            color: '#2ecc71', weight: 4, opacity: 0.6, dashArray: '5, 10'
+                        }).addTo(map);
+                        polylines.push(line);
+                    }
+                }
+
+                let aiRealDist = 0, aiRealTime = 0;
+                aiSegments.forEach(s => { aiRealDist += s.distance_km; aiRealTime += s.duration_min; });
+
+                // Zoom vừa
+                const allPoints = [...naiveSegments, ...aiSegments].flatMap(s => s.path);
+                if (allPoints.length > 0) {
+                    map.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30] });
+                }
+
+                hideLoading();
+
+                // 5. Hiển thị bảng so sánh
+                const timeSaved = Math.round((naiveTotalTime - aiRealTime) * 10) / 10;
+                const distSaved = Math.round((naiveTotalDist - aiRealDist) * 100) / 100;
+                const timePct = naiveTotalTime > 0 ? Math.round(timeSaved / naiveTotalTime * 100) : 0;
+                const distPct = naiveTotalDist > 0 ? Math.round(distSaved / naiveTotalDist * 100) : 0;
+
+                // Tên các điểm theo thứ tự gốc
+                const naiveNames = naiveOrder.map(id => {
+                    const p = allPOIs.find(x => x._id === id);
+                    return p ? p.placeName : '?';
+                });
+                const aiNames = aiOrder.map(id => {
+                    const p = allPOIs.find(x => x._id === id);
+                    return p ? p.placeName : '?';
+                });
+
+                const vehicleLabel = getSelectedLabel();
+                let html = `
+                    <div style="background:#fff3cd; border-left:4px solid #ffc107; padding:10px; border-radius:4px; margin-bottom:10px;">
+                        <strong>⚡ KẾT QUẢ SO SÁNH (${vehicleLabel}):</strong><br><br>
+                        <table style="width:100%; font-size:0.85rem; border-collapse:collapse;">
+                            <tr style="background:#f8f9fa;"><th style="padding:6px; text-align:left;"></th><th style="padding:6px;">🔴 Thứ tự gốc</th><th style="padding:6px;">🟢 AI tối ưu</th></tr>
+                            <tr><td style="padding:6px;">📏 Khoảng cách</td><td style="padding:6px; text-align:center;">${Math.round(naiveTotalDist*100)/100} km</td><td style="padding:6px; text-align:center; color:green; font-weight:bold;">${Math.round(aiRealDist*100)/100} km</td></tr>
+                            <tr style="background:#f8f9fa;"><td style="padding:6px;">⏱ Thời gian</td><td style="padding:6px; text-align:center;">${Math.round(naiveTotalTime*10)/10} phút</td><td style="padding:6px; text-align:center; color:green; font-weight:bold;">${Math.round(aiRealTime*10)/10} phút</td></tr>
+                        </table><br>
+                        ${timeSaved > 2 ? `<div style="background:#d4edda; color:#155724; padding:8px; border-radius:4px; text-align:center;">🎉 <b>AI tiết kiệm được ${timeSaved} phút (${timePct}%) và ${distSaved} km (${distPct}%)</b></div>` : 
+                          (timeSaved < -2 ? `<div style="background:#fff3cd; color:#856404; padding:8px; border-radius:4px; text-align:center;">ℹ️ Thứ tự gốc của bạn đang tối ưu hơn AI về thời gian</div>` :
+                          `<div style="background:#e2e3e5; color:#383d41; padding:8px; border-radius:4px; text-align:center;">ℹ️ Hai lộ trình có chi phí xấp xỉ nhau</div>`)}
+                    </div>
+                    <div style="font-size:0.8rem; margin-bottom:8px;">
+                        <span style="color:#e74c3c;">━ ━ ━</span> Thứ tự gốc: ${naiveNames.join(' → ')}<br>
+                        <span style="color:#2ecc71;">━━━━</span> AI tối ưu: ${aiNames.join(' → ')}
+                    </div>
+                `;
+
+                document.getElementById("results").innerHTML = html;
+
+            } catch (error) {
+                hideLoading();
+                alert("Lỗi so sánh: " + error);
             }
         }
 
@@ -287,6 +720,7 @@
             document.querySelectorAll(".selected").forEach(el => el.classList.remove("selected"));
             for (let key in markers) { markers[key].setIcon(getIcon("blue")); }
             polylines.forEach(p => map.removeLayer(p));
+            polylines = [];
             document.getElementById("results").innerHTML = "";
             map.setView([16.0544, 108.2022], 6);
         }
@@ -304,6 +738,41 @@
             initMap();
             loadPOIs();
         };
+
+        // Hàm auto test ác mộng để demo chức năng so sánh
+        function runNightmareTest() {
+            clearMap();
+            // Thứ tự cố ý nhảy cóc để hành hạ thuật toán gốc: HN -> SG -> Ninh Binh -> Nha Trang -> Quang Ninh -> Da Nang
+            const nightmareNames = [
+                "Phố cổ Hà Nội",
+                "Chợ Bến Thành",
+                "Tràng An",
+                "Tháp Bà Ponagar",
+                "Vịnh Hạ Long",
+                "Bãi biển Mỹ Khê"
+            ];
+            
+            const listItems = Array.from(document.querySelectorAll('.poi-item'));
+            
+            nightmareNames.forEach(name => {
+                const poi = allPOIs.find(p => p.placeName === name);
+                if (poi) {
+                    const li = listItems.find(el => el.innerHTML.includes(name));
+                    toggleSelectPOI(poi._id, li);
+                }
+            });
+
+            if (selectedPOIs.length < 3) {
+                alert("Không đủ dữ liệu POI để chạy test. Hãy đảm bảo DB chứa đủ các địa điểm nổi tiếng.");
+                return;
+            }
+
+            // Đổi qua Ô tô và chạy so sánh
+            document.getElementById('vehicleSelect').value = 'driving-car';
+            setTimeout(() => {
+                compareRoutes();
+            }, 600);
+        }
     </script>
 </body>
 
