@@ -6,6 +6,8 @@ import ChatConversation from "../models/ChatConversation.js";
 import ChatMessage from "../models/ChatMessage.js";
 import {
   ACTIVE_SUPPORT_STATUSES,
+  buildStaffReplyConversationUpdate,
+  buildStaffSupportMessagePayload,
   buildSupportConversationCode,
   isActiveSupportStatus,
   normalizeSupportStatus,
@@ -40,7 +42,7 @@ const getCustomerFilter = (customerId) => {
   };
 };
 
-const isAdminUser = (req) => req.user?.role === "admin";
+const isAdminUser = (req) => req.user?.role === "admin" || req.user?.role === "staff";
 
 const getCustomerId = (req) => String(req.customer?._id ?? req.customer?.id ?? "");
 
@@ -204,6 +206,7 @@ export const bootstrapConversation = async (req, res) => {
 
     const customerId = getCustomerId(req);
     const sourcePage = String(req.body?.sourcePage ?? req.query?.sourcePage ?? "").trim();
+    const channel = String(req.body?.channel ?? req.query?.channel ?? "web").trim() || "web";
 
     const activeConversation = await getActiveConversationForCustomer(customerId);
     if (activeConversation) {
@@ -218,7 +221,7 @@ export const bootstrapConversation = async (req, res) => {
     const customer = req.customer;
     const conversation = await ChatConversation.create({
       conversationCode: buildSupportConversationCode(),
-      channel: "web",
+      channel,
       status: "waitingStaff",
       participantType: "customer",
       customerId: customer?._id ?? customerId,
@@ -641,6 +644,142 @@ export const getAdminConversationDetail = async (req, res) => {
   } catch (err) {
     console.error("getAdminConversationDetail error:", err);
     return res.status(500).json({ status: false, message: "Lỗi server" });
+  }
+};
+
+export const listAdminMessages = async (req, res) => {
+  try {
+    await connectDB();
+
+    if (!assertAdminAuth(req, res)) return;
+
+    const conversation = await getConversationForAdmin(req.params.conversationId);
+    if (!conversation) {
+      return res.status(404).json({ status: false, message: "Khong tim thay cuoc tro chuyen" });
+    }
+
+    const normalizedConversationId = String(conversation._id);
+    const messages = await ChatMessage.find({ conversationId: normalizedConversationId })
+      .select(
+        "_id conversationId clientMessageId senderType senderDisplayName messageType content isRead sentAt createdAt readAt"
+      )
+      .sort({ sentAt: 1, createdAt: 1, _id: 1 })
+      .lean();
+
+    const data = messages.map((message) => sanitizeSupportMessage(message));
+
+    return res.status(200).json({
+      status: true,
+      message: "OK",
+      data,
+      total: data.length,
+      conversation: await buildConversationResponse(conversation),
+    });
+  } catch (err) {
+    console.error("listAdminMessages error:", err);
+    return res.status(500).json({ status: false, message: "Loi server" });
+  }
+};
+
+export const sendAdminMessage = async (req, res) => {
+  try {
+    await connectDB();
+
+    if (!assertAdminAuth(req, res)) return;
+
+    const conversation = await getConversationForAdmin(req.params.conversationId);
+    if (!conversation) {
+      return res.status(404).json({ status: false, message: "Khong tim thay cuoc tro chuyen" });
+    }
+
+    if (!isActiveSupportStatus(conversation.status)) {
+      return res.status(409).json({
+        status: false,
+        message: "Cuoc tro chuyen da ket thuc. Vui long cap nhat trang thai truoc khi gui tin.",
+      });
+    }
+
+    const content = String(req.body?.content ?? req.body?.text ?? "").trim();
+    const clientMessageId = String(req.body?.clientMessageId ?? req.body?.client_message_id ?? "").trim();
+    const messageType = String(req.body?.messageType ?? req.body?.message_type ?? "text").trim() || "text";
+
+    if (!content) {
+      return res.status(400).json({ status: false, message: "Vui long nhap noi dung tin nhan" });
+    }
+
+    const normalizedConversationId = String(conversation._id);
+
+    if (clientMessageId) {
+      const existingMessage = await ChatMessage.findOne({
+        conversationId: normalizedConversationId,
+        clientMessageId,
+      }).lean();
+
+      if (existingMessage) {
+        return res.status(200).json({
+          status: true,
+          message: "OK",
+          duplicate: true,
+          data: sanitizeSupportMessage(existingMessage),
+          conversation: await buildConversationResponse(conversation),
+        });
+      }
+    }
+
+    const now = new Date();
+    const currentAdminId = getUserId(req);
+    const messagePayload = buildStaffSupportMessagePayload({
+      conversationId: normalizedConversationId,
+      staffId: currentAdminId,
+      staffName: req.user?.fullName || SUPPORT_FALLBACK_TITLE,
+      role: req.user?.role,
+      messageType,
+      content,
+      clientMessageId,
+      sentAt: now,
+    });
+
+    const message = await ChatMessage.create(messagePayload);
+    const conversationUpdate = buildStaffReplyConversationUpdate({
+      content,
+      sentAt: message.sentAt || now,
+    });
+
+    if (!String(conversation.assignedStaffUserId ?? "").trim()) {
+      conversationUpdate.$set.assignedStaffUserId = currentAdminId;
+    }
+
+    await ChatConversation.updateOne({ _id: conversation._id }, conversationUpdate);
+
+    const refreshedConversation = await ChatConversation.findById(conversation._id).lean();
+
+    return res.status(201).json({
+      status: true,
+      message: "OK",
+      data: sanitizeSupportMessage(message.toObject()),
+      conversation: await buildConversationResponse(refreshedConversation || conversation),
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
+      const conversation = await getConversationForAdmin(req.params.conversationId);
+      const existingMessage = await ChatMessage.findOne({
+        conversationId: String(req.params.conversationId),
+        clientMessageId: String(req.body?.clientMessageId ?? req.body?.client_message_id ?? "").trim(),
+      }).lean();
+
+      if (existingMessage) {
+        return res.status(200).json({
+          status: true,
+          message: "OK",
+          duplicate: true,
+          data: sanitizeSupportMessage(existingMessage),
+          conversation: conversation ? await buildConversationResponse(conversation) : undefined,
+        });
+      }
+    }
+
+    console.error("sendAdminMessage error:", err);
+    return res.status(500).json({ status: false, message: "Loi server" });
   }
 };
 

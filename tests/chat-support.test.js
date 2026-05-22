@@ -70,6 +70,73 @@ test("support chat helpers dedupe messages by clientMessageId", async () => {
   assert.equal(result.message.id, "message-1");
 });
 
+test("support chat helpers build staff reply payload and conversation update", async () => {
+  const supportChat = await loadSupportChatModule();
+  const sentAt = new Date("2026-04-21T08:30:00.000Z");
+
+  const payload = supportChat.buildStaffSupportMessagePayload({
+    conversationId: "conversation-1",
+    staffId: "staff-1",
+    staffName: "Support Agent",
+    role: "admin",
+    content: "Da nhan thong tin cua ban",
+    clientMessageId: "staff-client-1",
+    sentAt,
+  });
+
+  assert.equal(payload.conversationId, "conversation-1");
+  assert.equal(payload.senderType, "admin");
+  assert.equal(payload.senderUserId, "staff-1");
+  assert.equal(payload.senderDisplayName, "Support Agent");
+  assert.equal(payload.content, "Da nhan thong tin cua ban");
+  assert.equal(payload.clientMessageId, "staff-client-1");
+  assert.equal(payload.sentAt, sentAt);
+
+  const update = supportChat.buildStaffReplyConversationUpdate({
+    content: "Da nhan thong tin cua ban",
+    sentAt,
+  });
+
+  assert.deepEqual(update.$set, {
+    status: "pending",
+    lastMessagePreview: "Da nhan thong tin cua ban",
+    lastMessageAt: sentAt,
+    updatedAt: sentAt,
+  });
+  assert.deepEqual(update.$inc, {
+    unreadForCustomerCount: 1,
+  });
+});
+
+test("support chat helpers dedupe staff messages by clientMessageId", async () => {
+  const supportChat = await loadSupportChatModule();
+
+  const state = {
+    messages: [
+      {
+        id: "message-1",
+        conversationId: "conversation-1",
+        clientMessageId: "staff-client-1",
+        senderType: "staff",
+        content: "Xin chao",
+        sentAt: "2026-04-21T08:30:00.000Z",
+      },
+    ],
+  };
+
+  const result = supportChat.upsertSupportMessage(state, {
+    conversationId: "conversation-1",
+    clientMessageId: "staff-client-1",
+    senderType: "staff",
+    content: "Xin chao",
+    sentAt: "2026-04-21T08:30:00.000Z",
+  });
+
+  assert.equal(result.isDuplicate, true);
+  assert.equal(state.messages.length, 1);
+  assert.equal(result.message.id, "message-1");
+});
+
 test("chat routes expose support bootstrap, send, reopen, and admin queue endpoints", () => {
   assert.ok(findRoute("/conversations/bootstrap", "post"));
   assert.ok(findRoute("/conversations/:conversationId", "get"));
@@ -78,4 +145,6 @@ test("chat routes expose support bootstrap, send, reopen, and admin queue endpoi
   assert.ok(findRoute("/admin/queue", "get"));
   assert.ok(findRoute("/admin/conversations/:conversationId/claim", "post"));
   assert.ok(findRoute("/admin/conversations/:conversationId/status", "patch"));
+  assert.ok(findRoute("/admin/conversations/:conversationId/messages", "get"));
+  assert.ok(findRoute("/admin/conversations/:conversationId/messages", "post"));
 });

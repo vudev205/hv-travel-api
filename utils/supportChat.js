@@ -222,6 +222,45 @@ export function sanitizeSupportMessage(message) {
   };
 }
 
+export function buildStaffSupportMessagePayload(input = {}) {
+  const sentAt = input.sentAt instanceof Date ? input.sentAt : cloneDate(input.sentAt) || new Date();
+  const senderType = toStringValue(input.role).toLowerCase() === "admin" ? "admin" : "staff";
+  const payload = {
+    conversationId: toStringValue(input.conversationId),
+    senderType,
+    senderUserId: toStringValue(input.staffId),
+    senderDisplayName: toStringValue(input.staffName) || "HV Travel Support",
+    messageType: toStringValue(input.messageType || "text") || "text",
+    content: toStringValue(input.content),
+    isRead: false,
+    sentAt,
+  };
+
+  const clientMessageId = toStringValue(input.clientMessageId);
+  if (clientMessageId) {
+    payload.clientMessageId = clientMessageId;
+  }
+
+  return payload;
+}
+
+export function buildStaffReplyConversationUpdate(input = {}) {
+  const sentAt = input.sentAt instanceof Date ? input.sentAt : cloneDate(input.sentAt) || new Date();
+  const content = toStringValue(input.content);
+
+  return {
+    $set: {
+      status: SUPPORT_CONVERSATION_STATUSES.PENDING,
+      lastMessagePreview: content.slice(0, 180),
+      lastMessageAt: sentAt,
+      updatedAt: sentAt,
+    },
+    $inc: {
+      unreadForCustomerCount: 1,
+    },
+  };
+}
+
 export function upsertSupportMessage(state, input) {
   if (!state || !Array.isArray(state.messages)) {
     throw new Error("State.messages must be an array");

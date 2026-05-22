@@ -38,6 +38,8 @@ app.get("/", (_, res) => {
     endpoints: {
       test: "/api/test",
       tours: "GET /api/tours/list",
+      tourSearch: "GET /api/tours/search",
+      tourSearchBootstrap: "GET /api/tours/search/bootstrap",
       tourDetail: "GET /api/tours/:id",
       register: "POST /api/auth/register",
       login: "POST /api/auth/login",

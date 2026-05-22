@@ -19,9 +19,57 @@ const paymentSchema = new Schema(
       type: String,
       default: "",
     },
+    provider: {
+      type: String,
+      enum: ["Internal", "MoMo", "ZaloPay"],
+      default: "Internal",
+      index: true,
+    },
+    providerOrderId: {
+      type: String,
+    },
+    providerRequestId: {
+      type: String,
+    },
+    providerTransId: {
+      type: String,
+      default: "",
+    },
+    providerResultCode: {
+      type: Number,
+      default: null,
+    },
+    providerMessage: {
+      type: String,
+      default: "",
+    },
+    paymentUrl: {
+      type: String,
+      default: "",
+    },
+    deeplink: {
+      type: String,
+      default: "",
+    },
+    qrCodeUrl: {
+      type: String,
+      default: "",
+    },
+    rawCreateResponse: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+    rawIpnPayload: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+    rawQueryResponse: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
     paymentMethod: {
       type: String,
-      enum: ["CreditCard", "BankTransfer", "Cash"],
+      enum: ["CreditCard", "BankTransfer", "Cash", "MoMo", "ZaloPay"],
       required: true,
     },
     status: {
@@ -39,6 +87,9 @@ const paymentSchema = new Schema(
 
 // Indexes
 paymentSchema.index({ status: 1 });
+paymentSchema.index({ provider: 1, providerOrderId: 1 });
+paymentSchema.index({ providerOrderId: 1 }, { unique: true, sparse: true });
+paymentSchema.index({ providerRequestId: 1 }, { unique: true, sparse: true });
 
 const Payment =
   mongoose.models.Payment || mongoose.model("Payment", paymentSchema);
