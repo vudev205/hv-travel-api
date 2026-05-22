@@ -4,11 +4,13 @@ import {
   claimConversation,
   getAdminConversationDetail,
   getConversationDetail,
+  listAdminMessages,
   listConversations,
   listAdminQueue,
   listMessages,
   markConversationRead,
   reopenConversation,
+  sendAdminMessage,
   sendMessage,
   updateConversationStatus,
 } from "../controllers/chat.controller.js";
@@ -27,6 +29,8 @@ router.put("/conversations/:conversationId/read", customerAuth, markConversation
 
 router.get("/admin/queue", auth, listAdminQueue);
 router.get("/admin/conversations/:conversationId", auth, getAdminConversationDetail);
+router.get("/admin/conversations/:conversationId/messages", auth, listAdminMessages);
+router.post("/admin/conversations/:conversationId/messages", auth, sendAdminMessage);
 router.post("/admin/conversations/:conversationId/claim", auth, claimConversation);
 router.patch("/admin/conversations/:conversationId/status", auth, updateConversationStatus);
 
