@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import connectDB from "../config/db.js";
 import Review from "../models/Review.js";
 import Tour from "../models/Tour.js";
+import { isTourSearchEnabled, upsertToursInSearchIndex } from "../utils/tourSearchIndex.js";
 
 // Helper: Recalculate and update cached rating/reviewCount on Tour
 async function updateTourReviewCache(tourId) {
@@ -19,7 +20,7 @@ async function updateTourReviewCache(tourId) {
   const rating = stats.length > 0 ? Math.round(stats[0].avgRating * 10) / 10 : 0;
   const reviewCount = stats.length > 0 ? stats[0].count : 0;
 
-  await Tour.findByIdAndUpdate(tourId, { rating, reviewCount });
+  await Tour.findByIdAndUpdate(tourId, { rating, review_count: reviewCount });
 }
 
 // Create a review for a tour
@@ -62,6 +63,20 @@ export const createReview = async (req, res) => {
 
     // Update cached rating/reviewCount on Tour
     await updateTourReviewCache(tourId);
+
+    if (isTourSearchEnabled()) {
+      try {
+        const indexedTour = await Tour.findById(tourId).lean();
+        if (indexedTour) {
+          await upsertToursInSearchIndex([indexedTour]);
+        }
+      } catch (searchSyncError) {
+        console.warn(
+          "createReview search sync error:",
+          searchSyncError?.message || searchSyncError
+        );
+      }
+    }
 
     return res.status(201).json({
       status: true,

@@ -1,5 +1,15 @@
 import Tour from "../models/Tour.js";
 import connectDB from "../config/db.js";
+import {
+  buildTourSearchBootstrap,
+  mapSearchDocumentToTour,
+  parseTourSearchQuery,
+  searchToursWithMongoFallback,
+} from "../utils/tourSearch.js";
+import {
+  isTourSearchEnabled,
+  searchToursWithMeili,
+} from "../utils/tourSearchIndex.js";
 
 export const listTours = async (req, res) => {
   try {
@@ -69,5 +79,79 @@ export const tourDetail = async (req, res) => {
   } catch (e) {
     console.error("tourDetail error:", e);
     return res.status(500).json({ status: false, message: "Không lấy được chi tiết tour" });
+  }
+};
+
+const SEARCH_TOUR_SELECT =
+  "_id name category destination description images duration price rating review_count max_participants current_participants start_dates status is_deleted schedule";
+
+export const searchTours = async (req, res) => {
+  try {
+    await connectDB();
+
+    const parsedQuery = parseTourSearchQuery(req.query);
+
+    if (isTourSearchEnabled()) {
+      try {
+        const result = await searchToursWithMeili(parsedQuery);
+        const tours = Array.isArray(result?.hits)
+          ? result.hits.map(mapSearchDocumentToTour)
+          : [];
+        const total = Number(
+          result?.estimatedTotalHits ?? result?.totalHits ?? result?.total ?? tours.length
+        );
+
+        return res.json({
+          status: true,
+          count: tours.length,
+          total,
+          start: parsedQuery.start,
+          limit: parsedQuery.limit,
+          searchBackend: "meilisearch",
+          data: tours,
+        });
+      } catch (error) {
+        console.warn("searchTours meilisearch fallback:", error?.message || error);
+      }
+    }
+
+    const tours = await Tour.find({
+      status: "Active",
+      is_deleted: { $ne: true },
+    })
+      .select(SEARCH_TOUR_SELECT)
+      .lean();
+    const fallbackResult = searchToursWithMongoFallback(tours, parsedQuery);
+
+    return res.json({
+      status: true,
+      ...fallbackResult,
+      searchBackend: "mongo",
+    });
+  } catch (error) {
+    console.error("searchTours error:", error);
+    return res.status(500).json({ status: false, message: "Không tìm kiếm được tour" });
+  }
+};
+
+export const searchBootstrap = async (req, res) => {
+  try {
+    await connectDB();
+
+    const tours = await Tour.find({
+      status: "Active",
+      is_deleted: { $ne: true },
+    })
+      .select("_id name category destination images duration price rating review_count status is_deleted")
+      .lean();
+    const bootstrap = buildTourSearchBootstrap(tours);
+
+    return res.json({
+      status: true,
+      data: bootstrap,
+    });
+  } catch (error) {
+    console.error("searchBootstrap error:", error);
+    return res.status(500).json({ status: false, message: "Không tải được dữ liệu tìm kiếm" });
   }
 };
