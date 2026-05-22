@@ -21,6 +21,16 @@ import {
 import connectDB from "../config/db.js";
 import mongoose from "mongoose";
 
+const WEB_QR_SESSION_COLLECTION = "webQrLoginSessions";
+const QR_STATUS = {
+  pending: "pending",
+  scanned: "scanned",
+  approved: "approved",
+  denied: "denied",
+  expired: "expired",
+  consumed: "consumed",
+};
+
 function sanitizeCustomer(customer) {
   const customerData = customer?.toObject ? customer.toObject() : { ...customer };
   delete customerData.password;
@@ -45,6 +55,60 @@ export function sanitizeAuthResponse(customer, issued) {
     customer: sanitizeCustomerForAuth(customer),
     accessToken: issued.accessToken,
     refreshToken: issued.refreshToken,
+  };
+}
+
+function getWebQrSessionsCollection() {
+  return mongoose.connection.db.collection(WEB_QR_SESSION_COLLECTION);
+}
+
+async function findWebQrSessionByCode(code) {
+  await connectDB();
+  return getWebQrSessionsCollection().findOne({ code });
+}
+
+async function ensureCurrentQrSession(session) {
+  if (!session) {
+    return null;
+  }
+
+  if (
+    session.status === QR_STATUS.consumed ||
+    session.status === QR_STATUS.denied ||
+    session.status === QR_STATUS.expired
+  ) {
+    return session;
+  }
+
+  const expiresAt = session.expiresAt ? new Date(session.expiresAt) : null;
+  if (expiresAt && expiresAt <= new Date()) {
+    const updatedAt = new Date();
+    await getWebQrSessionsCollection().updateOne(
+      { _id: session._id },
+      {
+        $set: {
+          status: QR_STATUS.expired,
+          updatedAt,
+        },
+      }
+    );
+
+    return {
+      ...session,
+      status: QR_STATUS.expired,
+      updatedAt,
+    };
+  }
+
+  return session;
+}
+
+function sanitizeQrResolveResponse(session) {
+  return {
+    sessionId: session.sessionId,
+    browserLabel: session.browserLabel || "",
+    expiresAt: session.expiresAt,
+    status: session.status,
   };
 }
 
@@ -163,6 +227,148 @@ export const refreshToken = async (req, res) => {
         ? err.message
         : "Không thể làm mới phiên đăng nhập";
     return res.status(401).json({ status: false, message });
+  }
+};
+
+export const resolveWebQrLogin = async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ status: false, message: "Thiếu mã QR đăng nhập" });
+    }
+
+    let session = await findWebQrSessionByCode(code);
+    session = await ensureCurrentQrSession(session);
+
+    if (!session) {
+      return res.status(404).json({ status: false, message: "Không tìm thấy mã QR đăng nhập" });
+    }
+
+    if (
+      session.status === QR_STATUS.denied ||
+      session.status === QR_STATUS.consumed ||
+      session.status === QR_STATUS.expired
+    ) {
+      return res.status(400).json({
+        status: false,
+        message: "Mã QR không còn hiệu lực. Vui lòng tạo mã mới trên website.",
+      });
+    }
+
+    if (session.status === QR_STATUS.pending) {
+      const updatedAt = new Date();
+      await getWebQrSessionsCollection().updateOne(
+        { _id: session._id },
+        {
+          $set: {
+            status: QR_STATUS.scanned,
+            updatedAt,
+          },
+        }
+      );
+
+      session = {
+        ...session,
+        status: QR_STATUS.scanned,
+        updatedAt,
+      };
+    }
+
+    return res.json({ status: true, data: sanitizeQrResolveResponse(session) });
+  } catch (err) {
+    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+  }
+};
+
+export const approveWebQrLogin = async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ status: false, message: "Thiếu mã QR đăng nhập" });
+    }
+
+    let session = await findWebQrSessionByCode(code);
+    session = await ensureCurrentQrSession(session);
+
+    if (!session) {
+      return res.status(404).json({ status: false, message: "Không tìm thấy mã QR đăng nhập" });
+    }
+
+    if (session.status === QR_STATUS.expired) {
+      return res.status(400).json({ status: false, message: "Mã QR đã hết hạn" });
+    }
+
+    if (session.status === QR_STATUS.consumed) {
+      return res.status(400).json({ status: false, message: "Mã QR này đã được sử dụng" });
+    }
+
+    if (session.status === QR_STATUS.denied) {
+      return res.status(400).json({ status: false, message: "Yêu cầu đăng nhập đã bị từ chối" });
+    }
+
+    const updatedAt = new Date();
+    await getWebQrSessionsCollection().updateOne(
+      { _id: session._id },
+      {
+        $set: {
+          status: QR_STATUS.approved,
+          customerId: String(req.customer?._id ?? ""),
+          approvedAt: updatedAt,
+          deniedAt: null,
+          updatedAt,
+        },
+      }
+    );
+
+    return res.json({
+      status: true,
+      data: {
+        status: QR_STATUS.approved,
+        sessionId: session.sessionId,
+        expiresAt: session.expiresAt,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+  }
+};
+
+export const denyWebQrLogin = async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ status: false, message: "Thiếu mã QR đăng nhập" });
+    }
+
+    let session = await findWebQrSessionByCode(code);
+    session = await ensureCurrentQrSession(session);
+
+    if (!session) {
+      return res.status(404).json({ status: false, message: "Không tìm thấy mã QR đăng nhập" });
+    }
+
+    if (session.status === QR_STATUS.expired || session.status === QR_STATUS.consumed) {
+      return res.status(400).json({
+        status: false,
+        message: "Mã QR không còn hiệu lực. Vui lòng tạo mã mới trên website.",
+      });
+    }
+
+    const updatedAt = new Date();
+    await getWebQrSessionsCollection().updateOne(
+      { _id: session._id },
+      {
+        $set: {
+          status: QR_STATUS.denied,
+          deniedAt: updatedAt,
+          updatedAt,
+        },
+      }
+    );
+
+    return res.json({ status: true, data: { status: QR_STATUS.denied } });
+  } catch (err) {
+    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
   }
 };
 

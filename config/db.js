@@ -5,6 +5,7 @@ if (!cached) cached = global._mongoose = { conn: null, promise: null };
 
 export default async function connectDB() {
   const mongoUri = process.env.MONGO_URI;
+  const dbName = process.env.MONGO_DB_NAME || "HV-Travel";
   if (!mongoUri) throw new Error("Missing MONGO_URI");
 
   if (cached.conn) return cached.conn;
@@ -12,7 +13,7 @@ export default async function connectDB() {
   if (!cached.promise) {
     cached.promise = mongoose
       .connect(mongoUri, {
-        dbName: "HV-Travel",
+        dbName,
         serverSelectionTimeoutMS: 10000,
       })
       .then((m) => m);
@@ -20,7 +21,7 @@ export default async function connectDB() {
 
   try {
     cached.conn = await cached.promise;
-    console.log("MongoDB connected!");
+    console.log(`MongoDB connected: ${dbName}`);
     return cached.conn;
   } catch (err) {
     cached.promise = null; // lần sau retry lại được

@@ -14,6 +14,9 @@ import {
   getSessions,
   logoutSession,
   logoutAll,
+  resolveWebQrLogin,
+  approveWebQrLogin,
+  denyWebQrLogin,
 } from "../controllers/auth.controller.js";
 import { customerAuth } from "../middlewares/authMiddleware.js";
 
@@ -22,6 +25,9 @@ const router = express.Router();
 router.post("/register", register);
 router.post("/login", login);
 router.post("/refresh", refreshToken);
+router.post("/qr-login/resolve", resolveWebQrLogin);
+router.post("/qr-login/approve", customerAuth, approveWebQrLogin);
+router.post("/qr-login/deny", customerAuth, denyWebQrLogin);
 router.post("/logout", customerAuth, logout);
 router.get("/sessions", customerAuth, getSessions);
 router.delete("/sessions/:sessionId", customerAuth, logoutSession);

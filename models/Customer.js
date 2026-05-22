@@ -21,6 +21,16 @@ const StatsSchema = new Schema(
   { _id: false }
 );
 
+const PreferencesSchema = new Schema(
+  {
+    favoriteThemes: { type: [String], default: [] },
+    preferredBudgetLevel: { type: String, default: "Medium", trim: true },
+    travelStyle: { type: String, default: "", trim: true },
+    preferredRegions: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
 const customerSchema = new Schema(
   {
     customerCode: {
@@ -73,6 +83,10 @@ const customerSchema = new Schema(
     },
     stats: {
       type: StatsSchema,
+      default: () => ({}),
+    },
+    preferences: {
+      type: PreferencesSchema,
       default: () => ({}),
     },
     emailVerified: {
