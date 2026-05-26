@@ -12,6 +12,7 @@ import testRoutes from "./routes/test.routes.js";
 import chatbotRoutes from "./routes/chatbot.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
+import tourInteractionRoutes from "./routes/tourInteraction.routes.js";
 import connectDB from "./config/db.js";
 
 const app = express();
@@ -29,6 +30,7 @@ app.use("/api/test", testRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/interactions", tourInteractionRoutes);
 
 app.get("/", (_, res) => {
   res.json({
@@ -54,6 +56,7 @@ app.get("/", (_, res) => {
       chatAdminQueue: "GET /api/chat/admin/queue",
       aiRecommendation: "POST /api/ai/recommend",
       aiOptimizeRoute: "POST /api/ai/optimize-route",
+      tourView: "POST /api/interactions/tours/:tourId/view",
     }
   });
 });

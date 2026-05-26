@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+test*.py
+demo_*.html

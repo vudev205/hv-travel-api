@@ -5,13 +5,13 @@ import unicodedata
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-
+# Chuẩn hóa ID thành chuỗi để dùng làm khóa.
 def to_id(value):
     if value is None:
         return ""
     return str(value)
 
-
+# Ép kiểu an toàn sang float (hỗ trợ Decimal của MongoDB).
 def as_float(value, default=0.0):
     try:
         if isinstance(value, dict) and "$numberDecimal" in value:
@@ -22,7 +22,7 @@ def as_float(value, default=0.0):
     except (TypeError, ValueError):
         return default
 
-
+# Đưa giá trị về danh sách chuỗi không rỗng.
 def as_list(value):
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
@@ -30,14 +30,14 @@ def as_list(value):
         return [str(value).strip()]
     return []
 
-
+# Bỏ dấu và đưa về chữ thường để so khớp.
 def normalize_text(value):
     text = str(value or "")
     text = unicodedata.normalize("NFD", text)
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
     return text.replace("đ", "d").replace("Đ", "D").lower()
 
-
+# Loại bỏ trùng lặp dựa trên giá trị đã chuẩn hóa.
 def unique(values):
     seen = set()
     result = []
@@ -49,12 +49,12 @@ def unique(values):
         result.append(str(value).strip())
     return result
 
-
+# Lấy giá người lớn từ tour.
 def get_price(tour):
     price = tour.get("price") or {}
     return as_float(price.get("adult"), 0.0)
 
-
+# Chuyển giá thành mức ngân sách.
 def budget_level_from_price(price):
     if price <= 0:
         return ""
@@ -64,7 +64,7 @@ def budget_level_from_price(price):
         return "Trung bình"
     return "Cao"
 
-
+# Chuẩn hóa nhãn ngân sách về mức tiêu chuẩn.
 def normalize_budget(value):
     raw = normalize_text(value).strip()
     if raw in {"low", "thap", "tiet kiem", "binh dan"}:
@@ -75,7 +75,7 @@ def normalize_budget(value):
         return "Cao"
     return str(value or "").strip()
 
-
+# Gộp lịch trình thành một đoạn text.
 def build_schedule_text(schedule):
     pieces = []
     for item in schedule or []:
@@ -88,7 +88,7 @@ def build_schedule_text(schedule):
         )
     return " ".join(pieces)
 
-
+# Tạo hồ sơ tour phẳng và giàu text để tính điểm.
 def get_tour_profile(tour):
     destination = tour.get("destination") or {}
     duration = tour.get("duration") or {}
@@ -133,7 +133,7 @@ def get_tour_profile(tour):
         "raw": tour,
     }
 
-
+# Tạo text hồ sơ người dùng từ sở thích và tương tác.
 def build_user_text(customer, target_interactions, tour_profiles):
     prefs = customer.get("preferences") or {}
     favorite_themes = as_list(prefs.get("favoriteThemes"))
@@ -157,7 +157,7 @@ def build_user_text(customer, target_interactions, tour_profiles):
 
     return normalize_text(" ".join(pieces))
 
-
+# Tính điểm tương đồng TF-IDF (cosine) cho nội dung.
 def calculate_content_scores(customer, tour_profiles, target_interactions):
     if not tour_profiles:
         return {}
@@ -178,16 +178,24 @@ def calculate_content_scores(customer, tour_profiles, target_interactions):
 
     return {tour_id: float(scores[index]) for index, tour_id in enumerate(tour_ids)}
 
-
+# Cộng điểm tương tác vào ma trận user-item.
 def add_interaction(user_item, user_id, tour_id, score):
     if not user_id or not tour_id:
         return
     user_item[user_id][tour_id] += score
 
-
-def build_user_item_matrix(bookings, favourites, reviews, valid_tour_ids):
+# Tạo ma trận user-item và thống kê độ phổ biến.
+def build_user_item_matrix(bookings, favourites, reviews, valid_tour_ids, views=None):
     user_item = defaultdict(lambda: defaultdict(float))
     popularity = defaultdict(lambda: {"bookings": 0, "favourites": 0, "reviews": 0, "rating_sum": 0.0})
+
+    for view in views or []:
+        user_id = to_id(view.get("customerId") or view.get("customer_id"))
+        tour_id = to_id(view.get("tourId") or view.get("tour_id"))
+        if tour_id not in valid_tour_ids:
+            continue
+        view_count = max(1.0, min(3.0, as_float(view.get("viewCount"), 1.0)))
+        add_interaction(user_item, user_id, tour_id, 1.0 + 0.25 * (view_count - 1.0))
 
     for favourite in favourites or []:
         user_id = to_id(favourite.get("customerId") or favourite.get("customer_id"))
@@ -224,7 +232,7 @@ def build_user_item_matrix(bookings, favourites, reviews, valid_tour_ids):
 
     return user_item, popularity
 
-
+# Tính cosine similarity giữa hai vector dict thưa.
 def cosine_dict(left, right):
     common = set(left.keys()).intersection(right.keys())
     numerator = sum(left[key] * right[key] for key in common)
@@ -234,7 +242,7 @@ def cosine_dict(left, right):
         return 0.0
     return numerator / (left_norm * right_norm)
 
-
+# Chuyển ma trận user-item sang item-user.
 def build_item_vectors(user_item):
     item_vectors = defaultdict(dict)
     for user_id, tours in user_item.items():
@@ -242,7 +250,7 @@ def build_item_vectors(user_item):
             item_vectors[tour_id][user_id] = score
     return item_vectors
 
-
+# Tính điểm collaborative theo item cho user mục tiêu.
 def calculate_collaborative_scores(target_user_id, user_item, valid_tour_ids):
     target_interactions = dict(user_item.get(target_user_id, {}))
     if not target_interactions:
@@ -253,7 +261,7 @@ def calculate_collaborative_scores(target_user_id, user_item, valid_tour_ids):
 
     for candidate_id in valid_tour_ids:
         if candidate_id in target_interactions:
-            scores[candidate_id] = 0.0
+            scores[candidate_id] = min(1.0, target_interactions[candidate_id] / 5.0)
             continue
 
         numerator = 0.0
@@ -270,7 +278,7 @@ def calculate_collaborative_scores(target_user_id, user_item, valid_tour_ids):
 
     return scores, target_interactions
 
-
+# Tính điểm phổ biến từ rating, bookings, favourites.
 def calculate_popularity_scores(tour_profiles, popularity):
     max_bookings = max([stats["bookings"] for stats in popularity.values()] or [0])
     max_favourites = max([stats["favourites"] for stats in popularity.values()] or [0])
