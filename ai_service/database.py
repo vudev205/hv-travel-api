@@ -28,15 +28,18 @@ async def get_recommendation_interactions():
     bookings_cursor = db["Bookings"].find({"is_deleted": {"$ne": True}})
     favourites_cursor = db["Favourites"].find({})
     reviews_cursor = db["Reviews"].find({"isApproved": True})
+    views_cursor = db["TourInteractions"].find({"type": "view"})
 
     bookings = await bookings_cursor.to_list(length=None)
     favourites = await favourites_cursor.to_list(length=None)
     reviews = await reviews_cursor.to_list(length=None)
+    views = await views_cursor.to_list(length=None)
 
     return {
         "bookings": bookings,
         "favourites": favourites,
         "reviews": reviews,
+        "views": views,
     }
 
 async def get_all_route_edges():

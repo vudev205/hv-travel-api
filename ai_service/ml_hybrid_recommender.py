@@ -29,7 +29,7 @@ POPULAR_ONLY_WEIGHTS = {
     "popularity": 1.0,
 }
 
-
+# Chọn bộ trọng số theo tín hiệu có sẵn.
 def get_weights(content_scores, collaborative_scores, target_interactions):
     has_content = any(score > 0 for score in content_scores.values())
     has_cf = bool(target_interactions) and any(score > 0 for score in collaborative_scores.values())
@@ -39,7 +39,7 @@ def get_weights(content_scores, collaborative_scores, target_interactions):
         return COLD_START_WEIGHTS
     return POPULAR_ONLY_WEIGHTS
 
-
+# So khớp tag tour với sở thích người dùng.
 def get_matched_tags(customer, profile):
     prefs = customer.get("preferences") or {}
     preferred_terms = {
@@ -54,7 +54,7 @@ def get_matched_tags(customer, profile):
     }
     return [tag for tag in profile["tags"] if normalize_text(tag) in preferred_terms]
 
-
+# Tạo lý do gợi ý dễ hiểu.
 def build_reasons(profile, matched_tags, content_score, collaborative_score, popularity_score):
     reasons = []
     if matched_tags:
@@ -69,15 +69,12 @@ def build_reasons(profile, matched_tags, content_score, collaborative_score, pop
         reasons.append(f"Ngân sách: {profile['budget_level']}")
     return reasons[:4]
 
-
+# Kết hợp điểm theo trọng số và xếp hạng tour.
 def rank_candidates(customer, tour_profiles, target_interactions, content_scores, collaborative_scores, popularity_scores):
     weights = get_weights(content_scores, collaborative_scores, target_interactions)
     candidates = []
 
     for tour_id, profile in tour_profiles.items():
-        if tour_id in target_interactions:
-            continue
-
         content_score = content_scores.get(tour_id, 0.0)
         collaborative_score = collaborative_scores.get(tour_id, 0.0)
         popularity_score = popularity_scores.get(tour_id, 0.0)
@@ -112,7 +109,7 @@ def rank_candidates(customer, tour_profiles, target_interactions, content_scores
     )
     return candidates
 
-
+# Loại trùng theo tên tour và giữ top_k.
 def dedupe_by_tour_name(candidates, top_k):
     deduped = []
     seen_names = set()
@@ -126,8 +123,8 @@ def dedupe_by_tour_name(candidates, top_k):
             break
     return deduped
 
-
-def calculate_hybrid_score(customer, all_tours, bookings=None, favourites=None, reviews=None, top_k=5):
+# Điều phối pipeline hybrid và trả về kết quả xếp hạng.
+def calculate_hybrid_score(customer, all_tours, bookings=None, favourites=None, reviews=None, top_k=5, views=None):
     """
     Machine Learning layer:
     - Hybrid Recommendation cho đề tài Học máy cơ bản.
@@ -145,7 +142,7 @@ def calculate_hybrid_score(customer, all_tours, bookings=None, favourites=None, 
     valid_tour_ids = set(tour_profiles.keys())
     target_user_id = to_id(customer.get("_id") or customer.get("id"))
 
-    user_item, popularity = build_user_item_matrix(bookings, favourites, reviews, valid_tour_ids)
+    user_item, popularity = build_user_item_matrix(bookings, favourites, reviews, valid_tour_ids, views=views)
     collaborative_scores, target_interactions = calculate_collaborative_scores(target_user_id, user_item, valid_tour_ids)
     content_scores = calculate_content_scores(customer, tour_profiles, target_interactions)
     popularity_scores = calculate_popularity_scores(tour_profiles, popularity)

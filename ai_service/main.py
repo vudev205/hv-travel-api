@@ -53,6 +53,7 @@ async def recommend_tours(req: RecommendRequest):
         bookings=interactions["bookings"],
         favourites=interactions["favourites"],
         reviews=interactions["reviews"],
+        views=interactions.get("views", []),
         top_k=req.top_k,
     )
 
@@ -68,6 +69,7 @@ async def recommend_tours(req: RecommendRequest):
             "bookingCount": len(interactions["bookings"]),
             "favouriteCount": len(interactions["favourites"]),
             "reviewCount": len(interactions["reviews"]),
+            "viewCount": len(interactions.get("views", [])),
         },
     }
 
