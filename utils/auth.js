@@ -1,9 +1,34 @@
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import validator from "validator";
 
-// Secret key cho JWT (nên lưu trong .env)
-const JWT_SECRET = process.env.JWT_SECRET || "HV-Travel-Vip-Pro";
+let ephemeralJwtSecret = null;
+
+export function getJwtSecret() {
+  const configuredSecret = process.env.JWT_SECRET?.trim();
+  if (configuredSecret) {
+    return configuredSecret;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET environment variable is required in production.");
+  }
+
+  if (!ephemeralJwtSecret) {
+    ephemeralJwtSecret = crypto.randomBytes(32).toString("hex");
+    console.warn(
+      "[SECURITY] JWT_SECRET is not set. Generated an ephemeral per-process JWT secret for non-production use."
+    );
+  }
+
+  return ephemeralJwtSecret;
+}
+
+if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET?.trim()) {
+  throw new Error("JWT_SECRET environment variable is required in production.");
+}
+
 export const ACCESS_TOKEN_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || "15m";
 
 // Hash password
@@ -19,20 +44,24 @@ export async function comparePassword(password, hashedPassword) {
 
 // Tạo JWT token
 export function generateToken(user, role = "user", sessionId = null) {
-  return jwt.sign({
-    id: user._id,
-    tokenVersion: user.tokenVersion,
-    role,
-    sessionId,
-  }, JWT_SECRET, {
-    expiresIn: ACCESS_TOKEN_EXPIRES_IN
-  });
+  return jwt.sign(
+    {
+      id: user._id,
+      tokenVersion: user.tokenVersion,
+      role,
+      sessionId,
+    },
+    getJwtSecret(),
+    {
+      expiresIn: ACCESS_TOKEN_EXPIRES_IN,
+    }
+  );
 }
 
 // Verify JWT token
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, getJwtSecret());
   } catch (error) {
     return null;
   }
@@ -57,8 +86,8 @@ export function validateRegister(data) {
   // Check password
   if (!data.password) {
     errors.password = "Vui lòng nhập mật khẩu";
-  } else if (data.password.length < 6) {
-    errors.password = "Mật khẩu phải có ít nhất 6 ký tự";
+  } else if (data.password.length < 8) {
+    errors.password = "Mật khẩu phải có ít nhất 8 ký tự";
   }
 
   // Check re-password
@@ -70,7 +99,7 @@ export function validateRegister(data) {
 
   return {
     isValid: Object.keys(errors).length === 0,
-    errors
+    errors,
   };
 }
 
@@ -90,6 +119,6 @@ export function validateLogin(data) {
 
   return {
     isValid: Object.keys(errors).length === 0,
-    errors
+    errors,
   };
 }

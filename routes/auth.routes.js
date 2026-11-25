@@ -18,7 +18,7 @@ import {
   approveWebQrLogin,
   denyWebQrLogin,
 } from "../controllers/auth.controller.js";
-import { customerAuth } from "../middlewares/authMiddleware.js";
+import { customerAuth, debugEndpointGuard } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
@@ -38,6 +38,6 @@ router.post("/resend-otp", resendOtp);
 router.post("/verify-otp", verifyOtp);
 router.post("/reset-password", resetPassword);
 router.post("/change-password", customerAuth, changePassword);
-router.get("/db", dbCheck);
+router.get("/db", debugEndpointGuard, dbCheck);
 
 export default router;

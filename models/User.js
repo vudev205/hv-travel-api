@@ -56,6 +56,12 @@ const userSchema = new mongoose.Schema({
     default: 'user'
   },
 
+  status: {
+    type: String,
+    enum: ['Active', 'Inactive', 'Banned', 'Locked'],
+    default: 'Active'
+  },
+
   // xác thực riêng
   emailVerified: {
     type: Boolean,

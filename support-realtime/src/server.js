@@ -5,20 +5,38 @@ import { createServer } from "node:http";
 import { Server } from "socket.io";
 
 import { authenticateSocket, authenticateSocketPayload } from "./socket/auth.js";
-import { getRealtimeSnapshot, registerSupportSocket } from "./socket/events.js";
+import { registerSupportSocket } from "./socket/events.js";
 
 const app = express();
 const server = createServer(app);
 
-const allowedOrigins = String(process.env.CORS_ORIGIN || "*")
+const isProduction = process.env.NODE_ENV === "production";
+const LOCALHOST_ORIGIN_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
+const allowedOrigins = String(process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || "")
   .split(",")
   .map((origin) => origin.trim())
-  .filter(Boolean);
+  .filter((origin) => Boolean(origin) && origin !== "*");
 
-app.use(express.json());
+const corsOriginValidator = (origin, callback) => {
+  if (!origin) {
+    return callback(null, true);
+  }
+  if (allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  }
+  if (!isProduction && allowedOrigins.length === 0 && LOCALHOST_ORIGIN_REGEX.test(origin)) {
+    return callback(null, true);
+  }
+  const err = new Error("CORS origin not allowed");
+  err.status = 403;
+  return callback(err, false);
+};
+
+app.use(express.json({ limit: "256kb" }));
 app.use(
   cors({
-    origin: allowedOrigins.includes("*") ? true : allowedOrigins,
+    origin: corsOriginValidator,
     credentials: true,
   })
 );
@@ -36,14 +54,13 @@ app.get("/", (_, res) => {
     ok: true,
     service: process.env.SERVICE_NAME || "hv-travel-support-realtime",
     realtime: "socket.io",
-    rooms: ["user:<userId>", "agent:<agentId>", "conversation:<conversationId>", "support:queue"],
-    snapshot: getRealtimeSnapshot(),
+    now: new Date().toISOString(),
   });
 });
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins.includes("*") ? true : allowedOrigins,
+    origin: corsOriginValidator,
     credentials: true,
   },
 });

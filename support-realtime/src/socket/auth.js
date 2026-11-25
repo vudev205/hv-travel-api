@@ -1,6 +1,32 @@
+import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 
-const DEFAULT_JWT_SECRET = "HV-Travel-Vip-Pro";
+const ALLOWED_AGENT_ROLES = new Set(["admin", "manager", "staff"]);
+let ephemeralJwtSecret = null;
+
+export function resolveJwtSecret(explicitSecret = "") {
+  const configured = String(explicitSecret || process.env.JWT_SECRET || "").trim();
+  if (configured) {
+    return configured;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET environment variable is required in production.");
+  }
+
+  if (!ephemeralJwtSecret) {
+    ephemeralJwtSecret = crypto.randomBytes(32).toString("hex");
+    console.warn(
+      "[SECURITY][support-realtime] JWT_SECRET is not set. Generated an ephemeral per-process secret for non-production use."
+    );
+  }
+
+  return ephemeralJwtSecret;
+}
+
+if (process.env.NODE_ENV === "production" && !String(process.env.JWT_SECRET || "").trim()) {
+  throw new Error("JWT_SECRET environment variable is required in production.");
+}
 
 export class SocketAuthError extends Error {
   constructor(message, statusCode = 401, code = "unauthorized") {
@@ -17,10 +43,11 @@ const parseBearerToken = (authorizationHeader = "") => {
   return value.slice("Bearer ".length).trim();
 };
 
-const normalizeRole = (rawRole = "") => {
+export const normalizeRole = (rawRole = "") => {
   const value = String(rawRole || "").trim().toLowerCase();
   if (value === "customer") return "customer";
-  return "agent";
+  if (ALLOWED_AGENT_ROLES.has(value)) return "agent";
+  throw new SocketAuthError("Unsupported or unauthorized role", 403, "invalid_role");
 };
 
 export const extractHandshakeToken = (source = {}) => {
@@ -39,7 +66,7 @@ export const authenticateSocketPayload = (payload = {}, options = {}) => {
     throw new SocketAuthError("Missing access token", 401, "missing_token");
   }
 
-  const jwtSecret = options.jwtSecret || process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
+  const jwtSecret = resolveJwtSecret(options.jwtSecret);
   const jwtIssuer = options.jwtIssuer || process.env.JWT_ISSUER;
   const jwtAudience = options.jwtAudience || process.env.JWT_AUDIENCE;
 

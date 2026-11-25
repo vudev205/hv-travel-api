@@ -97,10 +97,26 @@ const ensureConversationForCustomer = (customerId) => {
   return conversation;
 };
 
+const assertConversationAccess = (principal, conversation) => {
+  if (!conversation) {
+    const err = new Error("Conversation not found");
+    err.code = "conversation_not_found";
+    throw err;
+  }
+
+  if (principal?.role === "customer" && String(conversation.customerId) !== String(principal.userId)) {
+    const err = new Error("Forbidden: you do not have access to this conversation");
+    err.code = "forbidden";
+    throw err;
+  }
+};
+
 const getOrCreateConversation = (principal, payload = {}) => {
   const providedConversationId = buildConversationKey(payload.conversationId);
   if (providedConversationId && conversationStore.has(providedConversationId)) {
-    return conversationStore.get(providedConversationId);
+    const existing = conversationStore.get(providedConversationId);
+    assertConversationAccess(principal, existing);
+    return existing;
   }
 
   if (principal.role === "customer") {
@@ -204,6 +220,7 @@ export const registerSupportSocket = (io, socket, principal) => {
   socket.on("conversation:join", (payload = {}, ack) => {
     try {
       const conversation = getOrCreateConversation(principal, payload);
+      assertConversationAccess(principal, conversation);
       const roomNames = buildRoomNames(principal, conversation.id);
       socket.join(roomNames.conversationRoom);
       emitConversationSnapshot(socket, conversation);
@@ -211,12 +228,14 @@ export const registerSupportSocket = (io, socket, principal) => {
         ack({ ok: true, conversation: serializeConversation(conversation) });
       }
     } catch (error) {
+      const code = error.code || "conversation_join_failed";
+      const message = error.message || "Unable to join conversation";
       if (typeof ack === "function") {
-        ack({ ok: false, error: error.message || "Unable to join conversation" });
+        ack({ ok: false, code, error: message });
       }
       socket.emit("error:event", {
-        code: "conversation_join_failed",
-        message: error.message || "Unable to join conversation",
+        code,
+        message,
       });
     }
   });
@@ -239,6 +258,7 @@ export const registerSupportSocket = (io, socket, principal) => {
       }
 
       const conversation = conversationStore.get(conversationId) || getOrCreateConversation(principal, payload);
+      assertConversationAccess(principal, conversation);
       if (!conversationStore.has(conversation.id)) {
         conversationStore.set(conversation.id, conversation);
       }
@@ -289,57 +309,90 @@ export const registerSupportSocket = (io, socket, principal) => {
         ack({ ok: true, message: serializeMessage(message) });
       }
     } catch (error) {
+      const code = error.code || "message_send_failed";
+      const message = error.message || "Unable to send message";
       if (typeof ack === "function") {
-        ack({ ok: false, error: error.message || "Unable to send message" });
+        ack({ ok: false, code, error: message });
       }
       socket.emit("error:event", {
-        code: "message_send_failed",
-        message: error.message || "Unable to send message",
+        code,
+        message,
       });
     }
   });
 
-  socket.on("typing:start", (payload = {}) => {
-    const conversationId = buildConversationKey(payload.conversationId);
-    const conversation = conversationId ? conversationStore.get(conversationId) : null;
-    if (!conversation) return;
+  socket.on("typing:start", (payload = {}, ack) => {
+    try {
+      const conversationId = buildConversationKey(payload.conversationId);
+      const conversation = conversationId ? conversationStore.get(conversationId) : null;
+      if (!conversation) return;
 
-    conversation.typingUsers.set(userId, {
-      userId,
-      displayName,
-      role,
-      startedAt: nowIso(),
-    });
+      assertConversationAccess(principal, conversation);
 
-    socket.to(`${ROOM_PREFIX.conversation}:${conversation.id}`).emit("typing:update", {
-      conversationId: conversation.id,
-      typingUsers: [...conversation.typingUsers.values()],
-    });
+      conversation.typingUsers.set(userId, {
+        userId,
+        displayName,
+        role,
+        startedAt: nowIso(),
+      });
+
+      socket.to(`${ROOM_PREFIX.conversation}:${conversation.id}`).emit("typing:update", {
+        conversationId: conversation.id,
+        typingUsers: [...conversation.typingUsers.values()],
+      });
+
+      if (typeof ack === "function") {
+        ack({ ok: true });
+      }
+    } catch (error) {
+      const code = error.code || "typing_start_failed";
+      const message = error.message || "Unable to start typing";
+      if (typeof ack === "function") {
+        ack({ ok: false, code, error: message });
+      }
+      socket.emit("error:event", { code, message });
+    }
   });
 
-  socket.on("typing:stop", (payload = {}) => {
-    const conversationId = buildConversationKey(payload.conversationId);
-    const conversation = conversationId ? conversationStore.get(conversationId) : null;
-    if (!conversation) return;
+  socket.on("typing:stop", (payload = {}, ack) => {
+    try {
+      const conversationId = buildConversationKey(payload.conversationId);
+      const conversation = conversationId ? conversationStore.get(conversationId) : null;
+      if (!conversation) return;
 
-    conversation.typingUsers.delete(userId);
-    socket.to(`${ROOM_PREFIX.conversation}:${conversation.id}`).emit("typing:update", {
-      conversationId: conversation.id,
-      typingUsers: [...conversation.typingUsers.values()],
-    });
+      assertConversationAccess(principal, conversation);
+
+      conversation.typingUsers.delete(userId);
+      socket.to(`${ROOM_PREFIX.conversation}:${conversation.id}`).emit("typing:update", {
+        conversationId: conversation.id,
+        typingUsers: [...conversation.typingUsers.values()],
+      });
+
+      if (typeof ack === "function") {
+        ack({ ok: true });
+      }
+    } catch (error) {
+      const code = error.code || "typing_stop_failed";
+      const message = error.message || "Unable to stop typing";
+      if (typeof ack === "function") {
+        ack({ ok: false, code, error: message });
+      }
+      socket.emit("error:event", { code, message });
+    }
   });
 
   socket.on("message:read", (payload = {}, ack) => {
     try {
       const conversationId = buildConversationKey(payload.conversationId);
       const conversation = conversationId ? conversationStore.get(conversationId) : null;
-      if (!conversation) {
-        throw new Error("Conversation not found");
-      }
+      assertConversationAccess(principal, conversation);
 
       const now = nowIso();
-      conversation.unreadForCustomerCount = 0;
-      conversation.unreadForAgentCount = 0;
+      if (role === "customer") {
+        conversation.unreadForCustomerCount = 0;
+      } else {
+        conversation.unreadForAgentCount = 0;
+      }
       conversation.messages.forEach((message) => {
         if (!message.readAt) {
           message.readAt = now;
@@ -357,9 +410,12 @@ export const registerSupportSocket = (io, socket, principal) => {
         ack({ ok: true, conversationId: conversation.id, readAt: now });
       }
     } catch (error) {
+      const code = error.code || "message_read_failed";
+      const message = error.message || "Unable to mark as read";
       if (typeof ack === "function") {
-        ack({ ok: false, error: error.message || "Unable to mark as read" });
+        ack({ ok: false, code, error: message });
       }
+      socket.emit("error:event", { code, message });
     }
   });
 

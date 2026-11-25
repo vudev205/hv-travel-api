@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import nodemailer from "nodemailer";
 
 // Tạo transporter với Gmail
@@ -11,9 +12,9 @@ const createTransporter = () => {
   });
 };
 
-// Generate OTP 6 số
+// Generate OTP 6 số bằng CSPRNG
 export const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return String(crypto.randomInt(100000, 1000000));
 };
 
 // HTML Template cho OTP email

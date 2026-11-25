@@ -21,11 +21,11 @@ export const listTours = async (req, res) => {
 
     const query = { is_deleted: { $ne: true }, status: { $ne: "Inactive" } };
 
-    // Filter by category name (string)
-    if (category) query.category = category;
+    // Filter by category name (strict string to prevent NoSQL operator injection)
+    if (typeof category === "string" && category.trim()) query.category = category.trim();
 
-    // Filter by destination city (string)
-    if (city) query["destination.city"] = city;
+    // Filter by destination city (strict string to prevent NoSQL operator injection)
+    if (typeof city === "string" && city.trim()) query["destination.city"] = city.trim();
 
     const tours = await Tour.find(query)
       .skip(start)

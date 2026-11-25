@@ -97,6 +97,14 @@ const customerSchema = new Schema(
       type: Number,
       default: 0,
     },
+    failedLoginAttempts: {
+      type: Number,
+      default: 0,
+    },
+    lockUntil: {
+      type: Date,
+      default: null,
+    },
     refreshSessions: {
       type: [RefreshSessionSchema],
       default: [],

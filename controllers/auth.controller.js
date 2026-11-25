@@ -14,12 +14,15 @@ import {
   rotateRefreshSession,
 } from "../utils/authSession.js";
 import {
+  consumeVerifiedResetToken,
   createAndSendOTP,
-  getVerifiedEmailByOtpId,
   verifyOTP,
 } from "../utils/otpHelper.js";
 import connectDB from "../config/db.js";
 import mongoose from "mongoose";
+
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 const WEB_QR_SESSION_COLLECTION = "webQrLoginSessions";
 const QR_STATUS = {
@@ -31,10 +34,21 @@ const QR_STATUS = {
   consumed: "consumed",
 };
 
+function sendServerError(res, err, message = "Lỗi server") {
+  console.error("[AuthController Error]:", err);
+  const payload = { status: false, message };
+  if (process.env.NODE_ENV !== "production" && err?.message) {
+    payload.error = err.message;
+  }
+  return res.status(500).json(payload);
+}
+
 function sanitizeCustomer(customer) {
   const customerData = customer?.toObject ? customer.toObject() : { ...customer };
   delete customerData.password;
   delete customerData.refreshSessions;
+  delete customerData.failedLoginAttempts;
+  delete customerData.lockUntil;
   return customerData;
 }
 
@@ -142,6 +156,8 @@ export const register = async (req, res) => {
       stats: { loyaltyPoints: 0, lastActivity: new Date() },
       emailVerified: false,
       tokenVersion: 0,
+      failedLoginAttempts: 0,
+      lockUntil: null,
       refreshSessions: [],
     });
 
@@ -153,7 +169,7 @@ export const register = async (req, res) => {
       data: sanitizeAuthResponse(customer, issued),
     });
   } catch (err) {
-    return res.status(500).json({ status: false, error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -171,15 +187,54 @@ export const login = async (req, res) => {
     }
 
     const customer = await Customer.findOne({ email: email.toLowerCase() }).select("+password");
-    if (!customer || !(await comparePassword(password, customer.password))) {
+    if (!customer) {
       return res.status(401).json({ status: false, message: "Sai thông tin đăng nhập" });
     }
 
-    if (customer.status === "Banned") {
+    if (customer.status !== "Active") {
       return res.status(403).json({ status: false, message: "Tài khoản đã bị khóa" });
     }
 
-    customer.stats.lastActivity = new Date();
+    const now = new Date();
+    if (customer.lockUntil && new Date(customer.lockUntil) > now) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((new Date(customer.lockUntil).getTime() - now.getTime()) / 1000)
+      );
+      return res.status(423).json({
+        status: false,
+        message: "Tài khoản tạm thời bị khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 15 phút.",
+        retryAfterSeconds,
+      });
+    }
+
+    const isPasswordValid = await comparePassword(password, customer.password);
+    if (!isPasswordValid) {
+      const expiredPreviousLock = Boolean(customer.lockUntil && new Date(customer.lockUntil) <= now);
+      const nextAttempts = expiredPreviousLock ? 1 : (customer.failedLoginAttempts || 0) + 1;
+      const shouldLock = nextAttempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+      const updateFields = {
+        failedLoginAttempts: nextAttempts,
+        lockUntil: shouldLock ? new Date(now.getTime() + LOGIN_LOCKOUT_MS) : null,
+      };
+
+      await Customer.updateOne({ _id: customer._id }, { $set: updateFields });
+
+      if (shouldLock) {
+        return res.status(423).json({
+          status: false,
+          message: "Tài khoản tạm thời bị khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 15 phút.",
+          retryAfterSeconds: Math.ceil(LOGIN_LOCKOUT_MS / 1000),
+        });
+      }
+
+      return res.status(401).json({ status: false, message: "Sai thông tin đăng nhập" });
+    }
+
+    // Reset failed-login counter & lockout upon successful authentication
+    customer.failedLoginAttempts = 0;
+    customer.lockUntil = null;
+    customer.stats.lastActivity = now;
     const issued = issueSessionTokens(customer, { role: "customer", deviceId });
     await customer.save();
 
@@ -188,7 +243,7 @@ export const login = async (req, res) => {
       data: sanitizeAuthResponse(customer, issued),
     });
   } catch (err) {
-    return res.status(500).json({ status: false, error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -209,7 +264,7 @@ export const refreshToken = async (req, res) => {
       return res.status(401).json({ status: false, message: "Refresh token không hợp lệ" });
     }
 
-    if (customer.status === "Banned") {
+    if (customer.status !== "Active") {
       return res.status(403).json({ status: false, message: "Tài khoản đã bị khóa" });
     }
 
@@ -222,8 +277,9 @@ export const refreshToken = async (req, res) => {
       data: sanitizeAuthResponse(customer, issued),
     });
   } catch (err) {
+    const isProd = process.env.NODE_ENV === "production";
     const message =
-      /invalid|revoked|expired/i.test(err?.message || "")
+      !isProd && /invalid|revoked|expired/i.test(err?.message || "")
         ? err.message
         : "Không thể làm mới phiên đăng nhập";
     return res.status(401).json({ status: false, message });
@@ -276,7 +332,7 @@ export const resolveWebQrLogin = async (req, res) => {
 
     return res.json({ status: true, data: sanitizeQrResolveResponse(session) });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -329,7 +385,7 @@ export const approveWebQrLogin = async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -368,7 +424,7 @@ export const denyWebQrLogin = async (req, res) => {
 
     return res.json({ status: true, data: { status: QR_STATUS.denied } });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -377,7 +433,7 @@ export const me = async (req, res) => {
     await connectDB();
     return res.json({ status: true, data: req.customer });
   } catch (err) {
-    return res.status(500).json({ status: false, error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -395,7 +451,7 @@ export const logout = async (req, res) => {
 
     return res.status(200).json({ status: true, message: "Đăng xuất thành công" });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server" });
+    return sendServerError(res, err);
   }
 };
 
@@ -405,7 +461,7 @@ export const getSessions = async (req, res) => {
     const customer = await Customer.findById(req.customer?._id).select("refreshSessions");
 
     if (!customer) {
-      return res.status(401).json({ status: false, message: "KhÃ´ng tÃ¬m tháº¥y tÃ i khoáº£n" });
+      return res.status(401).json({ status: false, message: "Không tìm thấy tài khoản" });
     }
 
     return res.json({
@@ -413,7 +469,7 @@ export const getSessions = async (req, res) => {
       data: listCustomerSessions(customer, req.authSessionId),
     });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lá»—i server" });
+    return sendServerError(res, err);
   }
 };
 
@@ -423,19 +479,19 @@ export const logoutSession = async (req, res) => {
     const customer = await Customer.findById(req.customer?._id);
 
     if (!customer) {
-      return res.status(401).json({ status: false, message: "KhÃ´ng tÃ¬m tháº¥y tÃ i khoáº£n" });
+      return res.status(401).json({ status: false, message: "Không tìm thấy tài khoản" });
     }
 
     const revokedSession = revokeSessionById(customer, req.params.sessionId);
     if (!revokedSession) {
-      return res.status(404).json({ status: false, message: "KhÃ´ng tÃ¬m tháº¥y phiÃªn Ä‘Äƒng nháº­p" });
+      return res.status(404).json({ status: false, message: "Không tìm thấy phiên đăng nhập" });
     }
 
     await customer.save();
 
-    return res.status(200).json({ status: true, message: "ÄÄƒng xuáº¥t thiáº¿t bá»‹ thÃ nh cÃ´ng" });
+    return res.status(200).json({ status: true, message: "Đăng xuất thiết bị thành công" });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lá»—i server" });
+    return sendServerError(res, err);
   }
 };
 
@@ -445,15 +501,15 @@ export const logoutAll = async (req, res) => {
     const customer = await Customer.findById(req.customer?._id);
 
     if (!customer) {
-      return res.status(401).json({ status: false, message: "KhÃ´ng tÃ¬m tháº¥y tÃ i khoáº£n" });
+      return res.status(401).json({ status: false, message: "Không tìm thấy tài khoản" });
     }
 
     revokeAllCustomerSessions(customer);
     await customer.save();
 
-    return res.status(200).json({ status: true, message: "ÄÃ£ Ä‘Äƒng xuáº¥t má»i thiáº¿t bá»‹" });
+    return res.status(200).json({ status: true, message: "Đã đăng xuất mọi thiết bị" });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lá»—i server" });
+    return sendServerError(res, err);
   }
 };
 
@@ -479,7 +535,7 @@ export const forgotPassword = async (req, res) => {
       message: "Mã OTP đã được gửi đến email của bạn.",
     });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -505,7 +561,7 @@ export const resendOtp = async (req, res) => {
       message: "Mã OTP đã được gửi đến email của bạn.",
     });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -526,25 +582,26 @@ export const verifyOtp = async (req, res) => {
       status: true,
       message: "Xác thực OTP thành công",
       otpId: result.otpId,
+      resetToken: result.resetToken,
     });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+    return sendServerError(res, err);
   }
 };
 
 export const resetPassword = async (req, res) => {
   try {
     await connectDB();
-    const { otpId, newPassword } = req.body;
+    const { resetToken, newPassword } = req.body;
 
-    if (!otpId || !newPassword) {
+    if (!resetToken || !newPassword) {
       return res.status(400).json({ status: false, message: "Vui lòng nhập đầy đủ thông tin" });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ status: false, message: "Mật khẩu phải có ít nhất 6 ký tự" });
+    if (newPassword.length < 8) {
+      return res.status(400).json({ status: false, message: "Mật khẩu phải có ít nhất 8 ký tự" });
     }
 
-    const email = await getVerifiedEmailByOtpId(otpId, "forgot_password");
+    const email = await consumeVerifiedResetToken(resetToken, "forgot_password");
     if (!email) {
       return res.status(400).json({
         status: false,
@@ -558,6 +615,8 @@ export const resetPassword = async (req, res) => {
     }
 
     customer.password = await hashPassword(newPassword);
+    customer.failedLoginAttempts = 0;
+    customer.lockUntil = null;
     revokeAllCustomerSessions(customer);
     await customer.save();
 
@@ -566,7 +625,7 @@ export const resetPassword = async (req, res) => {
       message: "Đặt lại mật khẩu thành công!",
     });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -578,10 +637,10 @@ export const changePassword = async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ status: false, message: "Vui lòng nhập đầy đủ thông tin" });
     }
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       return res
         .status(400)
-        .json({ status: false, message: "Mật khẩu mới phải có ít nhất 6 ký tự" });
+        .json({ status: false, message: "Mật khẩu mới phải có ít nhất 8 ký tự" });
     }
     if (currentPassword === newPassword) {
       return res.status(400).json({
@@ -611,7 +670,7 @@ export const changePassword = async (req, res) => {
       message: "Đổi mật khẩu thành công!",
     });
   } catch (err) {
-    return res.status(500).json({ status: false, message: "Lỗi server", error: err.message });
+    return sendServerError(res, err);
   }
 };
 
@@ -637,10 +696,14 @@ export const dbCheck = async (req, res) => {
       ping: pingResult,
     });
   } catch (err) {
-    return res.status(500).json({
+    console.error("[AuthController dbCheck Error]:", err);
+    const payload = {
       ok: false,
       message: "Loi server",
-      error: err?.message || String(err),
-    });
+    };
+    if (process.env.NODE_ENV !== "production" && err?.message) {
+      payload.error = err.message;
+    }
+    return res.status(500).json(payload);
   }
 };

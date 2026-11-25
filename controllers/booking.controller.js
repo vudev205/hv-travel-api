@@ -8,6 +8,8 @@ import {
   toBookingResponse,
 } from "../utils/bookingResponse.js";
 
+const ALLOWED_PASSENGER_TYPES = new Set(["Adult", "Child", "Infant"]);
+
 // Generate booking code: HVyyyyMMddHHmmssSSS
 function generateBookingCode() {
   const now = new Date();
@@ -26,6 +28,9 @@ function generateBookingCode() {
 
 // Create a new booking
 export const createBooking = async (req, res) => {
+  let reservedSeats = 0;
+  let reservedTourId = null;
+
   try {
     await connectDB();
 
@@ -38,30 +43,87 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({ status: false, message: "tour_id không hợp lệ" });
     }
 
-    // Validate required fields
+    // Validate required contact fields
     if (!contact_info || !contact_info.name || !contact_info.email || !contact_info.phone) {
       return res.status(400).json({ status: false, message: "Vui lòng nhập đầy đủ thông tin liên hệ" });
     }
 
-    // Check tour exists and is active
-    const tour = await Tour.findOne({
-      _id: tour_id,
-      is_deleted: { $ne: true },
-      status: { $ne: "Inactive" },
-    }).lean();
-    if (!tour) {
-      return res.status(404).json({ status: false, message: "Tour không tồn tại hoặc không khả dụng" });
+    // Validate non-empty passengers array with allowed types
+    if (!Array.isArray(passengers) || passengers.length === 0) {
+      return res.status(400).json({ status: false, message: "Vui lòng nhập ít nhất một hành khách" });
     }
 
-    // Build passengers with full schema
-    const passengerList = passengers || [];
-    const formattedPassengers = passengerList.map((p) => ({
-      full_name: p.full_name || "",
-      birth_date: p.birth_date || null,
-      type: p.type || "Adult",
-      gender: p.gender || null,
-      passport_number: p.passport_number || null,
-    }));
+    const formattedPassengers = [];
+    for (const p of passengers) {
+      if (!p || typeof p !== "object") {
+        return res.status(400).json({ status: false, message: "Thông tin hành khách không hợp lệ" });
+      }
+      const passengerType = typeof p.type === "string" ? p.type.trim() : "";
+      if (!ALLOWED_PASSENGER_TYPES.has(passengerType)) {
+        return res.status(400).json({
+          status: false,
+          message: "Loại hành khách không hợp lệ (chỉ chấp nhận Adult, Child, Infant)",
+        });
+      }
+      const fullName = typeof p.full_name === "string" ? p.full_name.trim() : "";
+      if (!fullName) {
+        return res.status(400).json({ status: false, message: "Vui lòng nhập họ tên cho tất cả hành khách" });
+      }
+
+      formattedPassengers.push({
+        full_name: fullName,
+        birth_date: p.birth_date || null,
+        type: passengerType,
+        gender: p.gender || null,
+        passport_number: p.passport_number || null,
+      });
+    }
+
+    const passengerCount = formattedPassengers.length;
+
+    // Atomically verify tour availability and reserve seats in a single conditional update
+    const tour = await Tour.findOneAndUpdate(
+      {
+        _id: tour_id,
+        is_deleted: { $ne: true },
+        status: { $ne: "Inactive" },
+        $or: [
+          { max_participants: { $lte: 0 } },
+          { max_participants: null },
+          { max_participants: { $exists: false } },
+          {
+            $expr: {
+              $lte: [
+                { $add: [{ $ifNull: ["$current_participants", 0] }, passengerCount] },
+                "$max_participants",
+              ],
+            },
+          },
+        ],
+      },
+      {
+        $inc: { current_participants: passengerCount },
+      },
+      { new: true }
+    ).lean();
+
+    if (!tour) {
+      const existingTour = await Tour.findOne({
+        _id: tour_id,
+        is_deleted: { $ne: true },
+        status: { $ne: "Inactive" },
+      })
+        .select("_id")
+        .lean();
+
+      if (!existingTour) {
+        return res.status(404).json({ status: false, message: "Tour không tồn tại hoặc không khả dụng" });
+      }
+      return res.status(400).json({ status: false, message: "Tour đã hết chỗ" });
+    }
+
+    reservedSeats = passengerCount;
+    reservedTourId = tour._id;
 
     // SERVER-SIDE PRICE CALCULATION
     const adultCount = formattedPassengers.filter((p) => p.type === "Adult").length;
@@ -75,19 +137,9 @@ export const createBooking = async (req, res) => {
 
     const priceAdult = discountPercent > 0 ? Math.round(baseAdult * (1 - discountPercent / 100)) : baseAdult;
 
-    // Subtotal
-    const subtotal = (adultCount * priceAdult) + (childCount * baseChild) + (infantCount * baseInfant);
-
-    // Hardcoded fees matching app for now (should come from settings/config later)
-    const serviceFee = 6000000;
-    const promoDiscount = 5500000;
-    const finalTotal = subtotal + serviceFee - promoDiscount;
-
-    // Check capacity
-    const passengerCount = formattedPassengers.length;
-    if (tour.max_participants > 0 && (tour.current_participants + passengerCount) > tour.max_participants) {
-      return res.status(400).json({ status: false, message: "Tour đã hết chỗ" });
-    }
+    // Subtotal (no hardcoded magic service fee or promo discount)
+    const subtotal = adultCount * priceAdult + childCount * baseChild + infantCount * baseInfant;
+    const finalTotal = Math.max(0, subtotal);
 
     // Build tour snapshot
     const tour_snapshot = {
@@ -111,7 +163,7 @@ export const createBooking = async (req, res) => {
       tour_snapshot,
       customer_id: customerId,
       booking_date: now,
-      total_amount: mongoose.Types.Decimal128.fromString(String(Math.max(0, finalTotal))),
+      total_amount: mongoose.Types.Decimal128.fromString(String(finalTotal)),
       status: "Pending",
       payment_status: "Unpaid",
       participants_count: passengerCount,
@@ -133,12 +185,7 @@ export const createBooking = async (req, res) => {
       deleted_at: null,
     });
 
-    // Update current_participants on Tour
-    if (passengerCount > 0) {
-      await Tour.findByIdAndUpdate(tour_id, {
-        $inc: { current_participants: passengerCount },
-      });
-    }
+    reservedSeats = 0;
 
     return res.status(201).json({
       status: true,
@@ -146,6 +193,15 @@ export const createBooking = async (req, res) => {
       data: toBookingResponse(booking),
     });
   } catch (err) {
+    if (reservedSeats > 0 && reservedTourId) {
+      try {
+        await Tour.findByIdAndUpdate(reservedTourId, {
+          $inc: { current_participants: -reservedSeats },
+        });
+      } catch (rollbackErr) {
+        console.error("createBooking seat rollback error:", rollbackErr);
+      }
+    }
     console.error("createBooking error:", err);
     return res.status(500).json({ status: false, message: "Lỗi server" });
   }
@@ -292,6 +348,22 @@ export const calculatePrice = async (req, res) => {
       return res.status(400).json({ status: false, message: "tour_id không hợp lệ" });
     }
 
+    const adults = Number(adult_count);
+    const children = Number(child_count);
+    const infants = Number(infant_count);
+
+    if (
+      !Number.isInteger(adults) ||
+      !Number.isInteger(children) ||
+      !Number.isInteger(infants) ||
+      adults < 0 ||
+      children < 0 ||
+      infants < 0 ||
+      adults + children + infants === 0
+    ) {
+      return res.status(400).json({ status: false, message: "Số lượng hành khách không hợp lệ" });
+    }
+
     const tour = await Tour.findOne({
       _id: tour_id,
       is_deleted: { $ne: true },
@@ -307,11 +379,11 @@ export const calculatePrice = async (req, res) => {
     const discountPercent = tour.price?.discount || 0;
 
     const priceAdult = discountPercent > 0 ? Math.round(baseAdult * (1 - discountPercent / 100)) : baseAdult;
-    const subtotal = (adult_count * priceAdult) + (child_count * baseChild) + (infant_count * baseInfant);
+    const subtotal = adults * priceAdult + children * baseChild + infants * baseInfant;
 
-    const serviceFee = 6000000;
-    const promoDiscount = 5500000;
-    const total = subtotal + serviceFee - promoDiscount;
+    const serviceFee = 0;
+    const promoDiscount = 0;
+    const total = Math.max(0, subtotal);
 
     return res.json({
       status: true,
@@ -319,12 +391,12 @@ export const calculatePrice = async (req, res) => {
         subtotal,
         service_fee: serviceFee,
         promo_discount: promoDiscount,
-        total: Math.max(0, total),
+        total,
         price_per_adult: priceAdult,
         price_per_child: baseChild,
         price_per_infant: baseInfant,
-        discount_percent: discountPercent
-      }
+        discount_percent: discountPercent,
+      },
     });
   } catch (err) {
     console.error("calculatePrice error:", err);

@@ -1,7 +1,7 @@
 import User from "../models/User.js";
 import Customer from "../models/Customer.js";
 import { verifyToken } from "../utils/auth.js";
-import connectDB from "../config/db.js"
+import connectDB from "../config/db.js";
 
 // Admin/Staff auth middleware — looks up User model
 export async function auth(req, res, next) {
@@ -29,9 +29,13 @@ export async function auth(req, res, next) {
       return res.status(401).json({ status: false, message: "Token không hợp lệ" });
     }
 
-    const user = await User.findById(decoded.id).select("_id tokenVersion role email fullName");
+    const user = await User.findById(decoded.id).select("_id tokenVersion role email fullName status");
     if (!user) {
       return res.status(401).json({ status: false, message: "User không tồn tại" });
+    }
+
+    if (user.status !== "Active") {
+      return res.status(403).json({ status: false, message: "Tài khoản không hoạt động hoặc đã bị khóa" });
     }
 
     if (decoded.tokenVersion !== user.tokenVersion) {
@@ -45,6 +49,21 @@ export async function auth(req, res, next) {
     console.error("auth middleware error:", err);
     return res.status(500).json({ status: false, message: "Lỗi server" });
   }
+}
+
+export function requireAdmin(req, res, next) {
+  const role = String(req.user?.role || "").trim().toLowerCase();
+  if (!req.user || role !== "admin") {
+    return res.status(403).json({ status: false, message: "Chỉ quản trị viên mới có quyền truy cập" });
+  }
+  return next();
+}
+
+export function debugEndpointGuard(req, res, next) {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(404).json({ status: false, message: "Not found" });
+  }
+  return auth(req, res, () => requireAdmin(req, res, next));
 }
 
 // Customer auth middleware — looks up Customer model (for mobile app)
@@ -86,7 +105,7 @@ export async function customerAuth(req, res, next) {
       return res.status(401).json({ status: false, message: "Tài khoản không tồn tại" });
     }
 
-    if (customer.status === "Banned") {
+    if (customer.status !== "Active") {
       return res.status(403).json({ status: false, message: "Tài khoản đã bị khóa" });
     }
 

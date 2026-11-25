@@ -10,7 +10,6 @@ const otpVerificationSchema = new mongoose.Schema({
   otp: {
     type: String,
     required: true,
-    length: 6
   },
   type: {
     type: String,
@@ -30,6 +29,19 @@ const otpVerificationSchema = new mongoose.Schema({
     type: Number,
     default: 0,
     max: 5
+  },
+  resetTokenHash: {
+    type: String,
+    default: null,
+    index: true
+  },
+  resetTokenExpiresAt: {
+    type: Date,
+    default: null
+  },
+  resetTokenUsedAt: {
+    type: Date,
+    default: null
   },
   createdAt: {
     type: Date,

@@ -1,21 +1,17 @@
 import User from "../models/User.js";
-import {
-  hashPassword,
-  comparePassword,
-  generateToken,
-  validateRegister,
-  validateLogin
-} from "../utils/auth.js";
-import { createAndSendOTP, verifyOTP, getVerifiedEmailByOtpId } from "../utils/otpHelper.js";
 import connectDB from "../config/db.js";
-import mongoose from "mongoose"
 
 export const me = async (req, res) => {
   try {
     await connectDB();
     res.json({ status: true, data: req.user });
   } catch (err) {
-    res.status(500).json({ status: false, error: err.message });
+    console.error("user.me error:", err);
+    const payload = { status: false, message: "Lỗi server" };
+    if (process.env.NODE_ENV !== "production" && err?.message) {
+      payload.error = err.message;
+    }
+    res.status(500).json(payload);
   }
 };
 
